@@ -1,8 +1,7 @@
 import axios from 'axios';
 
-// Force production URL for deployed version
 // Local API URL for development
-const API_BASE_URL = 'http://localhost:8000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
 console.log('🌐 API Base URL:', API_BASE_URL);
 console.log('🏠 Current hostname:', window.location.hostname);

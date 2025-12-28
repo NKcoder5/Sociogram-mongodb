@@ -7,9 +7,8 @@ const useSocket = (user) => {
   useEffect(() => {
     if (user && user.token) {
       // Initialize socket connection
-      // Force production URL for deployed version
       // Local Socket URL for development
-      const SOCKET_URL = 'http://localhost:8000';
+      const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8000';
       socket.current = io(SOCKET_URL, {
         auth: {
           token: user.token
