@@ -2,9 +2,10 @@ import { spawn } from 'child_process';
 import path from 'path';
 
 // Start backend server
-const backend = spawn('npm', ['run', 'dev'], {
+const backend = spawn(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'dev'], {
   cwd: 'backend',
-  stdio: ['inherit', 'pipe', 'pipe']
+  stdio: ['inherit', 'pipe', 'pipe'],
+  shell: true
 });
 
 backend.stdout.on('data', (data) => {
@@ -17,9 +18,10 @@ backend.stderr.on('data', (data) => {
 
 // Wait a bit for backend to start, then start frontend
 setTimeout(() => {
-  const frontend = spawn('npm', ['run', 'dev'], {
+  const frontend = spawn(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'dev'], {
     cwd: 'frontend',
-    stdio: ['inherit', 'pipe', 'pipe']
+    stdio: ['inherit', 'pipe', 'pipe'],
+    shell: true
   });
 
   frontend.stdout.on('data', (data) => {

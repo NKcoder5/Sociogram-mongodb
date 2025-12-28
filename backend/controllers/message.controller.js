@@ -1,8 +1,8 @@
-import { PrismaClient } from '@prisma/client';
+import { User } from "../models/user.model.js";
+import { Conversation } from "../models/conversation.model.js";
+import { Message } from "../models/message.model.js";
 import { getSocketInstance } from "../config/socket.js";
 import aiChatService from '../services/aiChat.service.js';
-
-const prisma = new PrismaClient();
 
 // Send message
 export const sendMessage = async (req, res) => {
@@ -15,175 +15,85 @@ export const sendMessage = async (req, res) => {
             senderId,
             receiverId,
             hasMessage: !!message,
-            hasFile: !!file,
-            timestamp: new Date().toISOString()
+            hasFile: !!file
         });
 
-        // Validate required fields
-        if (!senderId) {
-            console.error('❌ Missing senderId (authentication issue)');
-            return res.status(401).json({
-                success: false,
-                message: 'Authentication required'
-            });
-        }
-
-        if (!receiverId) {
-            console.error('❌ Missing receiverId in URL params');
+        if (!senderId || !receiverId || (!message && !file)) {
             return res.status(400).json({
                 success: false,
-                message: 'Receiver ID is required'
+                message: 'Invalid request data'
             });
         }
 
-        if (!message && !file) {
-            console.error('❌ Missing message content and file');
-            return res.status(400).json({
-                success: false,
-                message: 'Message content or file is required'
-            });
-        }
-
-        // Verify both users exist
-        const [sender, receiver] = await Promise.all([
-            prisma.user.findUnique({ where: { id: senderId } }),
-            prisma.user.findUnique({ where: { id: receiverId } })
-        ]);
-
-        if (!sender) {
-            console.error('❌ Sender not found:', senderId);
-            return res.status(404).json({
-                success: false,
-                message: 'Sender not found'
-            });
-        }
-
-        if (!receiver) {
-            console.error('❌ Receiver not found:', receiverId);
-            return res.status(404).json({
-                success: false,
-                message: 'Receiver not found'
-            });
-        }
-
-        console.log(`✅ Validated users: ${sender.username} -> ${receiver.username}`);
-
-        // Find existing conversation between these two users
-        let conversation = await prisma.conversation.findFirst({
-            where: {
-                AND: [
-                    {
-                        participants: {
-                            some: { userId: senderId }
-                        }
-                    },
-                    {
-                        participants: {
-                            some: { userId: receiverId }
-                        }
-                    },
-                    { isGroup: false }
-                ]
-            },
-            include: {
-                participants: {
-                    include: {
-                        user: {
-                            select: { id: true, username: true, profilePicture: true }
-                        }
-                    }
-                }
-            }
+        // Find existing conversation
+        let conversation = await Conversation.findOne({
+            participants: { $all: [senderId, receiverId] },
+            isGroupChat: false
         });
 
         // Create conversation if it doesn't exist
         if (!conversation) {
-            conversation = await prisma.conversation.create({
-                data: {
-                    isGroup: false,
-                    participants: {
-                        create: [
-                            { userId: senderId },
-                            { userId: receiverId }
-                        ]
-                    }
-                },
-                include: {
-                    participants: {
-                        include: {
-                            user: {
-                                select: { id: true, username: true, profilePicture: true }
-                            }
-                        }
-                    }
-                }
+            conversation = await Conversation.create({
+                participants: [senderId, receiverId],
+                isGroupChat: false
             });
         }
 
-        // Create new message with file support
-        const newMessage = await prisma.message.create({
-            data: {
-                content: message || null,
-                senderId,
-                receiverId,
-                conversationId: conversation.id,
-                messageType: file ? 'file' : 'text',
-                ...(file && {
-                    fileUrl: file.url,
-                    fileName: file.name,
-                    fileType: file.type,
-                    fileSize: file.size
-                })
-            },
-            include: {
-                sender: {
-                    select: { id: true, username: true, profilePicture: true }
-                },
-                receiver: {
-                    select: { id: true, username: true, profilePicture: true }
-                }
-            }
+        // Create new message
+        const newMessage = await Message.create({
+            sender: senderId,
+            receiver: receiverId,
+            conversationId: conversation._id,
+            content: message || '',
+            messageType: file ? 'file' : 'text',
+            file: file ? {
+                url: file.url,
+                name: file.name,
+                type: file.type,
+                size: file.size
+            } : undefined
         });
+
+        // Update conversation
+        conversation.messages.push(newMessage._id);
+        conversation.lastMessage = newMessage._id;
+        await conversation.save();
+
+        const populatedMessage = await Message.findById(newMessage._id)
+            .populate('sender', 'id username profilePicture')
+            .populate('receiver', 'id username profilePicture');
+
+        // Transform for frontend
+        const transformedMessage = {
+            ...populatedMessage.toObject(),
+            id: populatedMessage._id,
+            senderId: populatedMessage.sender._id,
+            receiverId: populatedMessage.receiver?._id
+        };
 
         // Emit real-time message via socket
         const io = getSocketInstance();
         if (io) {
-            // Emit to conversation room
-            io.to(conversation.id).emit('receiveMessage', newMessage);
-            
-            // Emit to specific users
-            io.to(`user_${receiverId}`).emit('newMessage', newMessage);
-            io.to(`user_${senderId}`).emit('messageSent', newMessage);
+            io.to(conversation._id.toString()).emit('receiveMessage', transformedMessage);
+            io.to(`user_${receiverId}`).emit('newMessage', transformedMessage);
+            io.to(`user_${senderId}`).emit('messageSent', transformedMessage);
         }
-
-        // Update conversation's last activity
-        await prisma.conversation.update({
-            where: { id: conversation.id },
-            data: { updatedAt: new Date() }
-        });
 
         return res.status(200).json({
             success: true,
             message: 'Message sent successfully',
-            data: newMessage
+            data: transformedMessage
         });
 
     } catch (error) {
-        console.error('❌ Send message error:', {
-            error: error.message,
-            stack: error.stack,
-            senderId: req.id,
-            receiverId: req.params.id,
-            requestBody: req.body,
-            timestamp: new Date().toISOString()
-        });
+        console.error('❌ Send message error:', error);
         return res.status(500).json({
             success: false,
-            message: 'Internal server error',
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            message: 'Internal server error'
         });
     }
 };
+
 
 // Send message to an existing conversation (group or direct) by conversationId
 export const sendMessageToConversation = async (req, res) => {
@@ -192,103 +102,73 @@ export const sendMessageToConversation = async (req, res) => {
         const { conversationId } = req.params;
         const { message, file } = req.body;
 
-        // Ensure user is a participant of the conversation
-        const conversation = await prisma.conversation.findUnique({
-            where: { id: conversationId },
-            include: { participants: true }
-        });
-
+        const conversation = await Conversation.findById(conversationId);
         if (!conversation) {
             return res.status(404).json({ success: false, message: 'Conversation not found' });
         }
 
-        const isParticipant = conversation.participants.some(p => p.userId === senderId);
+        const isParticipant = conversation.participants.includes(senderId);
         if (!isParticipant) {
             return res.status(403).json({ success: false, message: 'Not a participant of this conversation' });
         }
 
-        console.log('💬 Creating message with data:', {
-            content: message || null,
-            senderId,
+        const newMessage = await Message.create({
+            sender: senderId,
             conversationId,
+            content: message || '',
             messageType: file ? 'file' : 'text',
-            file: file
+            file: file ? {
+                url: file.url,
+                name: file.name,
+                type: file.type,
+                size: file.size
+            } : undefined
         });
 
-        const newMessage = await prisma.message.create({
-            data: {
-                content: message || null,
-                senderId,
-                receiverId: null,
-                conversationId,
-                messageType: file ? 'file' : 'text',
-                ...(file && {
-                    fileUrl: file.url,
-                    fileName: file.name,
-                    fileType: file.type,
-                    fileSize: file.size
-                })
-            },
-            include: {
-                sender: { select: { id: true, username: true, profilePicture: true } }
-            }
-        });
+        // Update conversation
+        conversation.messages.push(newMessage._id);
+        conversation.lastMessage = newMessage._id;
+        await conversation.save();
 
-        console.log('✅ Message created:', newMessage);
+        const populatedMessage = await Message.findById(newMessage._id)
+            .populate('sender', 'id username profilePicture');
+
+        // Transform for frontend
+        const transformedMessage = {
+            ...populatedMessage.toObject(),
+            id: populatedMessage._id,
+            senderId: populatedMessage.sender._id
+        };
 
         // Emit real-time to conversation room
         const io = getSocketInstance();
         if (io) {
-            io.to(conversationId).emit('receiveMessage', newMessage);
+            io.to(conversationId).emit('receiveMessage', transformedMessage);
         }
 
-        await prisma.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } });
-
-        return res.status(200).json({ success: true, data: newMessage });
+        return res.status(200).json({ success: true, data: transformedMessage });
     } catch (error) {
         console.log('Send to conversation error:', error);
         return res.status(500).json({ success: false, message: 'Internal server error' });
     }
 };
 
-// Get messages for a conversation
+// Get messages for a conversation (direct message pairing)
 export const getMessage = async (req, res) => {
     try {
         const senderId = req.id;
         const receiverId = req.params.id;
-        
-        // Find conversation between these two users
-        const conversation = await prisma.conversation.findFirst({
-            where: {
-                AND: [
-                    {
-                        participants: {
-                            some: { userId: senderId }
-                        }
-                    },
-                    {
-                        participants: {
-                            some: { userId: receiverId }
-                        }
-                    },
-                    { isGroup: false }
-                ]
-            },
-            include: {
-                messages: {
-                    include: {
-                        sender: {
-                            select: { id: true, username: true, profilePicture: true }
-                        },
-                        receiver: {
-                            select: { id: true, username: true, profilePicture: true }
-                        }
-                    },
-                    orderBy: {
-                        createdAt: 'asc'
-                    }
-                }
-            }
+
+        const conversation = await Conversation.findOne({
+            participants: { $all: [senderId, receiverId] },
+            isGroupChat: false
+        }).populate({
+            path: 'messages',
+            populate: [
+                { path: 'sender', select: 'id username profilePicture' },
+                { path: 'receiver', select: 'id username profilePicture' }
+            ],
+            options: { sort: { createdAt: 1 } }
         });
 
         if (!conversation) {
@@ -298,9 +178,17 @@ export const getMessage = async (req, res) => {
             });
         }
 
+        // Transform messages for frontend
+        const transformedMessages = conversation.messages.map(msg => ({
+            ...msg.toObject(),
+            id: msg._id,
+            senderId: msg.sender?._id,
+            receiverId: msg.receiver?._id
+        }));
+
         return res.status(200).json({
             success: true,
-            messages: conversation.messages
+            messages: transformedMessages
         });
     } catch (error) {
         console.log('Get messages error:', error);
@@ -317,52 +205,34 @@ export const getMessagesByConversation = async (req, res) => {
         const userId = req.id;
         const { conversationId } = req.params;
 
-        const conversation = await prisma.conversation.findUnique({
-            where: { id: conversationId },
-            include: {
-                participants: true,
-                messages: {
-                    include: {
-                        sender: { select: { id: true, username: true, profilePicture: true } },
-                        receiver: { select: { id: true, username: true, profilePicture: true } },
-                        reads: true,
-                        reactions: {
-                            include: {
-                                user: { select: { id: true, username: true } }
-                            }
-                        }
-                    },
-                    orderBy: { createdAt: 'asc' }
-                }
-            }
-        });
+        const conversation = await Conversation.findById(conversationId)
+            .populate({
+                path: 'messages',
+                populate: [
+                    { path: 'sender', select: 'id username profilePicture' },
+                    { path: 'receiver', select: 'id username profilePicture' }
+                ],
+                options: { sort: { createdAt: 1 } }
+            });
 
         if (!conversation) {
             return res.status(404).json({ success: false, message: 'Conversation not found' });
         }
 
-        const isParticipant = conversation.participants.some(p => p.userId === userId);
+        const isParticipant = conversation.participants.includes(userId);
         if (!isParticipant) {
             return res.status(403).json({ success: false, message: 'Not a participant of this conversation' });
         }
 
-        // Process messages to include grouped reactions
-        const messagesWithReactions = conversation.messages.map(message => {
-            const groupedReactions = message.reactions.reduce((acc, reaction) => {
-                if (!acc[reaction.emoji]) {
-                    acc[reaction.emoji] = [];
-                }
-                acc[reaction.emoji].push(reaction.userId);
-                return acc;
-            }, {});
+        // Transform messages for frontend
+        const transformedMessages = conversation.messages.map(msg => ({
+            ...msg.toObject(),
+            id: msg._id,
+            senderId: msg.sender?._id,
+            receiverId: msg.receiver?._id
+        }));
 
-            return {
-                ...message,
-                reactions: groupedReactions
-            };
-        });
-
-        return res.status(200).json({ success: true, messages: messagesWithReactions });
+        return res.status(200).json({ success: true, messages: transformedMessages });
     } catch (error) {
         console.log('Get messages by conversation error:', error);
         return res.status(500).json({ success: false, message: 'Internal server error' });
@@ -372,59 +242,41 @@ export const getMessagesByConversation = async (req, res) => {
 // Get all conversations for a user
 export const getConversations = async (req, res) => {
     try {
-        // Get conversations with last message and participants
-        const conversations = await prisma.conversation.findMany({
-            where: {
-                participants: {
-                    some: { userId: req.id }
-                }
-            },
-            include: {
-                participants: {
-                    include: {
-                        user: {
-                            select: { id: true, username: true, profilePicture: true }
-                        }
-                    }
-                },
-                messages: {
-                    orderBy: { createdAt: 'desc' },
-                    take: 1,
-                    include: {
-                        sender: {
-                            select: { id: true, username: true, profilePicture: true }
-                        }
-                    }
-                },
-                groupOwner: {
-                    select: { id: true, username: true, profilePicture: true }
-                },
-                groupAdmins: {
-                    include: {
-                        user: {
-                            select: { id: true, username: true, profilePicture: true }
-                        }
-                    }
-                },
-                groupSettings: true
-            },
-            orderBy: { updatedAt: 'desc' }
-        });
+        const conversations = await Conversation.find({
+            participants: { $in: [req.id] }
+        })
+            .populate('participants', 'id username profilePicture')
+            .populate('lastMessage')
+            .populate({
+                path: 'lastMessage',
+                populate: { path: 'sender', select: 'id username profilePicture' }
+            })
+            .populate('groupOwner', 'id username profilePicture')
+            .sort({ updatedAt: -1 });
 
-        // Transform conversations to include lastMessage properly
-        const transformedConversations = conversations.map(conv => ({
-            ...conv,
-            lastMessage: conv.messages[0] || null,
-            messages: undefined // Remove messages array to avoid confusion
-        }));
+        // Transform for frontend: wrap participants in a 'user' object and add 'id'
+        const transformedConversations = conversations.map(conv => {
+            const convObj = conv.toObject();
+            return {
+                ...convObj,
+                id: convObj._id,
+                participants: convObj.participants.map(p => ({
+                    user: { ...p, id: p._id }
+                })),
+                lastMessage: convObj.lastMessage ? {
+                    ...convObj.lastMessage,
+                    id: convObj.lastMessage._id,
+                    senderId: convObj.lastMessage.sender?._id || convObj.lastMessage.sender
+                } : null
+            };
+        });
 
         return res.status(200).json({
             success: true,
             conversations: transformedConversations
         });
     } catch (error) {
-        console.log('Get conversations error:', error?.message || error);
-        // Graceful fallback to prevent frontend breakage when DB is not migrated yet
+        console.log('Get conversations error:', error);
         return res.status(200).json({
             success: true,
             conversations: []
@@ -438,11 +290,8 @@ export const createGroupChat = async (req, res) => {
         let { participants, groupName } = req.body;
         const adminId = req.id;
 
-        // Normalize participants from possible shapes
         if (Array.isArray(participants)) {
             participants = participants.map(p => typeof p === 'string' ? p : p?.id || p?.userId).filter(Boolean);
-        } else if (participants && typeof participants === 'object') {
-            participants = Object.values(participants).map(p => typeof p === 'string' ? p : p?.id || p?.userId).filter(Boolean);
         }
 
         if (!participants || participants.length < 1) {
@@ -452,34 +301,26 @@ export const createGroupChat = async (req, res) => {
             });
         }
 
-        const conversation = await prisma.conversation.create({
-            data: {
-                isGroup: true,
-                name: groupName,
-                participants: {
-                    create: [ { userId: adminId }, ...participants.map(userId => ({ userId })) ]
-                }
-            },
-            include: {
-                participants: {
-                    include: {
-                        user: {
-                            select: { id: true, username: true, profilePicture: true }
-                        }
-                    }
-                }
-            }
+        const conversation = await Conversation.create({
+            isGroupChat: true,
+            groupName,
+            participants: [adminId, ...participants],
+            groupAdmin: [adminId],
+            groupOwner: adminId
         });
+
+        const populatedConversation = await Conversation.findById(conversation._id)
+            .populate('participants', 'id username profilePicture');
 
         return res.status(201).json({
             success: true,
-            conversation
+            conversation: populatedConversation
         });
     } catch (error) {
-        console.log('Create group chat error:', error?.message || error);
+        console.log('Create group chat error:', error);
         return res.status(400).json({
             success: false,
-            message: error?.message || 'Invalid group creation payload'
+            message: 'Invalid group creation payload'
         });
     }
 };
@@ -490,10 +331,7 @@ export const deleteMessage = async (req, res) => {
         const messageId = req.params.messageId;
         const userId = req.id;
 
-        const message = await prisma.message.findUnique({
-            where: { id: messageId }
-        });
-        
+        const message = await Message.findById(messageId);
         if (!message) {
             return res.status(404).json({
                 success: false,
@@ -501,21 +339,24 @@ export const deleteMessage = async (req, res) => {
             });
         }
 
-        if (message.senderId !== userId) {
+        if (message.sender.toString() !== userId) {
             return res.status(403).json({
                 success: false,
                 message: 'Unauthorized to delete this message'
             });
         }
 
-        await prisma.message.delete({
-            where: { id: messageId }
+        await Message.findByIdAndDelete(messageId);
+
+        // Remove from conversation
+        await Conversation.findByIdAndUpdate(message.conversationId, {
+            $pull: { messages: messageId }
         });
 
         // Emit socket event
         const io = getSocketInstance();
         if (io) {
-            io.to(message.conversationId).emit('messageDeleted', { messageId });
+            io.to(message.conversationId.toString()).emit('messageDeleted', { messageId });
         }
 
         return res.status(200).json({
@@ -537,28 +378,25 @@ export const markMessageRead = async (req, res) => {
         const userId = req.id;
         const { messageId } = req.params;
 
-        const message = await prisma.message.findUnique({ where: { id: messageId } });
+        const message = await Message.findById(messageId);
         if (!message) return res.status(404).json({ success: false, message: 'Message not found' });
 
         // Ensure user is participant of conversation
-        const convo = await prisma.conversation.findUnique({
-            where: { id: message.conversationId },
-            include: { participants: true }
-        });
-        const isParticipant = convo?.participants.some(p => p.userId === userId);
+        const convo = await Conversation.findById(message.conversationId);
+        const isParticipant = convo?.participants.includes(userId);
         if (!isParticipant) return res.status(403).json({ success: false, message: 'Forbidden' });
 
-        const read = await prisma.messageRead.upsert({
-            where: { messageId_userId: { messageId, userId } },
-            update: { readAt: new Date() },
-            create: { messageId, userId }
-        });
+        // Update read status in message if not already read by this user
+        await Message.updateOne(
+            { _id: messageId, "readBy.userId": { $ne: userId } },
+            { $addToSet: { readBy: { userId, readAt: new Date() } } }
+        );
 
         // Emit read receipt
         const io = getSocketInstance();
-        if (io) io.to(message.conversationId).emit('messageRead', { messageId, userId, readAt: read.readAt });
+        if (io) io.to(message.conversationId.toString()).emit('messageRead', { messageId, userId, readAt: new Date() });
 
-        return res.status(200).json({ success: true, read });
+        return res.status(200).json({ success: true, message: 'Message marked as read' });
     } catch (error) {
         console.log('Mark message read error:', error);
         return res.status(500).json({ success: false, message: 'Internal server error' });
@@ -610,11 +448,7 @@ export const addMessageReaction = async (req, res) => {
         const { messageId, emoji } = req.body;
         const userId = req.id;
 
-        // Check if message exists
-        const message = await prisma.message.findUnique({
-            where: { id: messageId }
-        });
-
+        const message = await Message.findById(messageId);
         if (!message) {
             return res.status(404).json({
                 success: false,
@@ -623,16 +457,7 @@ export const addMessageReaction = async (req, res) => {
         }
 
         // Check if reaction already exists
-        const existingReaction = await prisma.messageReaction.findUnique({
-            where: {
-                messageId_userId_emoji: {
-                    messageId,
-                    userId,
-                    emoji
-                }
-            }
-        });
-
+        const existingReaction = message.reactions?.find(r => r.userId.toString() === userId && r.emoji === emoji);
         if (existingReaction) {
             return res.status(400).json({
                 success: false,
@@ -640,21 +465,13 @@ export const addMessageReaction = async (req, res) => {
             });
         }
 
-        // Create reaction
-        const reaction = await prisma.messageReaction.create({
-            data: {
-                messageId,
-                userId,
-                emoji
-            },
-            include: {
-                user: { select: { id: true, username: true } }
-            }
+        await Message.findByIdAndUpdate(messageId, {
+            $push: { reactions: { userId, emoji } }
         });
 
         return res.status(200).json({
             success: true,
-            data: reaction
+            message: 'Reaction added'
         });
     } catch (error) {
         console.log('Add reaction error:', error);
@@ -671,21 +488,9 @@ export const removeMessageReaction = async (req, res) => {
         const { messageId, emoji } = req.body;
         const userId = req.id;
 
-        // Find and delete reaction
-        const deletedReaction = await prisma.messageReaction.deleteMany({
-            where: {
-                messageId,
-                userId,
-                emoji
-            }
+        await Message.findByIdAndUpdate(messageId, {
+            $pull: { reactions: { userId, emoji } }
         });
-
-        if (deletedReaction.count === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Reaction not found'
-            });
-        }
 
         return res.status(200).json({
             success: true,
@@ -705,15 +510,18 @@ export const getMessageReactions = async (req, res) => {
     try {
         const { messageId } = req.params;
 
-        const reactions = await prisma.messageReaction.findMany({
-            where: { messageId },
-            include: {
-                user: { select: { id: true, username: true } }
-            }
-        });
+        const message = await Message.findById(messageId)
+            .populate('reactions.userId', 'id username');
+
+        if (!message) {
+            return res.status(404).json({
+                success: false,
+                message: 'Message not found'
+            });
+        }
 
         // Group reactions by emoji
-        const groupedReactions = reactions.reduce((acc, reaction) => {
+        const groupedReactions = message.reactions.reduce((acc, reaction) => {
             if (!acc[reaction.emoji]) {
                 acc[reaction.emoji] = [];
             }
@@ -744,7 +552,7 @@ export const uploadMessageFile = async (req, res) => {
         }
 
         const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
-        
+
         const fileData = {
             url: fileUrl,
             name: req.file.originalname,
@@ -778,7 +586,7 @@ export const aiChatAssistant = async (req, res) => {
     try {
         const userId = req.id;
         const { message, conversationId, systemPrompt } = req.body;
-        
+
         console.log('🤖 AI Chat Assistant Request:', {
             userId,
             message: message?.substring(0, 50) + '...',
@@ -787,96 +595,109 @@ export const aiChatAssistant = async (req, res) => {
         });
 
         // Get user context
-        const user = await prisma.user.findUnique({
-            where: { id: userId },
-            select: { username: true, bio: true }
-        });
+        const user = await User.findById(userId).select('username bio');
 
         // Get conversation history if provided
         let conversationHistory = [];
-        if (conversationId) {
-            const messages = await prisma.message.findMany({
-                where: { conversationId },
-                orderBy: { createdAt: 'desc' },
-                take: 10,
-                select: { content: true, senderId: true }
-            });
-            
+        if (conversationId && conversationId !== 'floating-assistant') {
+            const messages = await Message.find({ conversationId })
+                .sort({ createdAt: -1 })
+                .limit(10)
+                .select('content sender isAI');
+
             conversationHistory = messages.reverse().map(msg => ({
                 content: msg.content,
-                isAI: false // We'll enhance this later to detect AI messages
+                isAI: msg.isAI
             }));
         }
 
-        // For floating assistant, don't persist messages in database
-        // Just generate AI response directly
+        // Generate AI response
         const aiResponse = await aiChatService.generateResponse(
-            message, 
-            conversationHistory, 
+            message,
+            conversationHistory,
             { username: user.username, bio: user.bio },
             systemPrompt
         );
         const aiText = aiResponse.success ? aiResponse.response : aiResponse.fallbackResponse || "I'm here to help! Could you tell me more about what you need? 😊";
 
-        // For floating assistant (conversationId: 'floating-assistant'), don't create database entries
+        // For floating assistant, don't create database entries
         if (conversationId === 'floating-assistant') {
-            console.log('🤖 Floating Assistant Response:', {
+            return res.status(200).json({
                 success: true,
-                responseLength: aiText?.length || 0,
-                response: aiText?.substring(0, 100) + '...'
-            });
-            return res.status(200).json({ 
-                success: true, 
-                response: aiText, 
-                usage: aiResponse.usage || null, 
-                conversationId: 'floating-assistant' 
+                response: aiText,
+                usage: aiResponse.usage || null,
+                conversationId: 'floating-assistant'
             });
         }
 
-        // For regular AI conversations, ensure conversation exists and persist messages
+        // For regular AI conversations, ensure conversation exists
         let aiConversationId = conversationId;
         if (!aiConversationId) {
-            const existing = await prisma.conversation.findFirst({
-                where: { isAI: true, participants: { some: { userId } } },
-                select: { id: true }
+            let conversation = await Conversation.findOne({
+                isAI: true,
+                participants: { $in: [userId] }
             });
-            if (existing) {
-                aiConversationId = existing.id;
-            } else {
-                const created = await prisma.conversation.create({
-                    data: {
-                        isGroup: false,
-                        isAI: true,
-                        name: 'AI Assistant',
-                        participants: { create: [{ userId }] }
-                    },
-                    select: { id: true }
+
+            if (!conversation) {
+                conversation = await Conversation.create({
+                    isGroupChat: false,
+                    isAI: true,
+                    groupName: 'AI Assistant',
+                    participants: [userId]
                 });
-                aiConversationId = created.id;
             }
+            aiConversationId = conversation._id;
         }
 
-        // Persist user's message for regular AI conversations
-        const userMsg = await prisma.message.create({
-            data: { content: message, senderId: userId, receiverId: null, conversationId: aiConversationId, messageType: 'text' }
+        // Persist messages
+        const userMsg = await Message.create({
+            content: message,
+            sender: userId,
+            conversationId: aiConversationId,
+            messageType: 'text',
+            isAI: false
         });
 
-        // Persist AI message for regular AI conversations
-        const aiMsg = await prisma.message.create({
-            data: { content: aiText, senderId: userId, receiverId: null, conversationId: aiConversationId, messageType: 'text', isAI: true }
+        const aiMsg = await Message.create({
+            content: aiText,
+            sender: userId,
+            conversationId: aiConversationId,
+            messageType: 'text',
+            isAI: true
         });
+
+        // Update conversation
+        await Conversation.findByIdAndUpdate(aiConversationId, {
+            $push: { messages: { $each: [userMsg._id, aiMsg._id] } },
+            lastMessage: aiMsg._id
+        });
+
+        // Transform for frontend
+        const transformMsg = (msg) => ({
+            ...msg.toObject(),
+            id: msg._id,
+            senderId: msg.sender?._id || msg.sender,
+            content: msg.content
+        });
+
+        const transformedUserMsg = transformMsg(userMsg);
+        const transformedAiMsg = transformMsg(aiMsg);
 
         // Emit both messages
         const io = getSocketInstance();
         if (io) {
-            io.to(aiConversationId).emit('receiveMessage', userMsg);
-            io.to(aiConversationId).emit('receiveMessage', aiMsg);
+            io.to(aiConversationId.toString()).emit('receiveMessage', transformedUserMsg);
+            io.to(aiConversationId.toString()).emit('receiveMessage', transformedAiMsg);
         }
 
-        return res.status(200).json({ success: true, response: aiText, usage: aiResponse.usage || null, conversationId: aiConversationId });
+        return res.status(200).json({
+            success: true,
+            response: aiText,
+            usage: aiResponse.usage || null,
+            conversationId: aiConversationId
+        });
     } catch (error) {
-        console.log('AI Chat Assistant error:', error?.message || error);
-        // Always return a friendly fallback to keep UI working
+        console.log('AI Chat Assistant error:', error);
         return res.status(200).json({ success: true, response: "I'm here to help! Could you tell me more?", usage: null });
     }
 };
@@ -885,15 +706,20 @@ export const aiChatAssistant = async (req, res) => {
 export const ensureAIConversation = async (req, res) => {
     try {
         const userId = req.id;
-        let conversation = await prisma.conversation.findFirst({
-            where: { isAI: true, participants: { some: { userId } } },
-            include: { participants: { include: { user: { select: { id: true, username: true, profilePicture: true } } } } }
-        });
+        let conversation = await Conversation.findOne({
+            isAI: true,
+            participants: { $in: [userId] }
+        }).populate('participants', 'id username profilePicture');
+
         if (!conversation) {
-            conversation = await prisma.conversation.create({
-                data: { isGroup: false, isAI: true, name: 'AI Assistant', participants: { create: [{ userId }] } },
-                include: { participants: { include: { user: { select: { id: true, username: true, profilePicture: true } } } } }
+            conversation = await Conversation.create({
+                isGroupChat: false,
+                isAI: true,
+                groupName: 'AI Assistant',
+                participants: [userId]
             });
+            conversation = await Conversation.findById(conversation._id)
+                .populate('participants', 'id username profilePicture');
         }
         return res.status(200).json({ success: true, conversation });
     } catch (error) {
@@ -908,10 +734,7 @@ export const getSmartReplies = async (req, res) => {
         const { message } = req.body;
         const userId = req.id;
 
-        const user = await prisma.user.findUnique({
-            where: { id: userId },
-            select: { username: true }
-        });
+        const user = await User.findById(userId).select('username');
 
         const suggestions = await aiChatService.generateSmartReply(message, {
             username: user.username
@@ -981,15 +804,13 @@ export const getConversationStarter = async (req, res) => {
 
         // Get both user profiles
         const [user, targetUser] = await Promise.all([
-            prisma.user.findUnique({
-                where: { id: userId },
-                select: { username: true, bio: true }
-            }),
-            prisma.user.findUnique({
-                where: { id: targetUserId },
-                select: { username: true, bio: true }
-            })
+            User.findById(userId).select('username bio'),
+            User.findById(targetUserId).select('username bio')
         ]);
+
+        if (!user || !targetUser) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
 
         const starter = await aiChatService.generateConversationStarter({
             currentUser: user.username,
@@ -1040,25 +861,22 @@ export const addGroupMember = async (req, res) => {
         const { userId } = req.body;
         const adminId = req.id;
 
-        // Check if group exists and user is admin
-        const group = await prisma.conversation.findUnique({
-            where: { id: groupId, isGroup: true },
-            include: { participants: true }
-        });
+        const group = await Conversation.findById(groupId);
 
-        if (!group) {
+        if (!group || !group.isGroupChat) {
             return res.status(404).json({ success: false, message: 'Group not found' });
         }
 
-        const isAdmin = group.participants.some(p => p.userId === adminId);
+        const isAdmin = group.groupAdmin.includes(adminId) || group.groupOwner.toString() === adminId;
         if (!isAdmin) {
             return res.status(403).json({ success: false, message: 'Not authorized' });
         }
 
         // Add member
-        await prisma.conversationParticipant.create({
-            data: { conversationId: groupId, userId }
-        });
+        if (!group.participants.includes(userId)) {
+            group.participants.push(userId);
+            await group.save();
+        }
 
         return res.status(200).json({ success: true, message: 'Member added successfully' });
     } catch (error) {
@@ -1073,25 +891,21 @@ export const removeGroupMember = async (req, res) => {
         const { userId } = req.body;
         const adminId = req.id;
 
-        // Check if group exists and user is admin
-        const group = await prisma.conversation.findUnique({
-            where: { id: groupId, isGroup: true },
-            include: { participants: true }
-        });
+        const group = await Conversation.findById(groupId);
 
-        if (!group) {
+        if (!group || !group.isGroupChat) {
             return res.status(404).json({ success: false, message: 'Group not found' });
         }
 
-        const isAdmin = group.participants.some(p => p.userId === adminId);
+        const isAdmin = group.groupAdmin.includes(adminId) || group.groupOwner.toString() === adminId;
         if (!isAdmin) {
             return res.status(403).json({ success: false, message: 'Not authorized' });
         }
 
         // Remove member
-        await prisma.conversationParticipant.deleteMany({
-            where: { conversationId: groupId, userId }
-        });
+        group.participants = group.participants.filter(p => p.toString() !== userId);
+        group.groupAdmin = group.groupAdmin.filter(a => a.toString() !== userId);
+        await group.save();
 
         return res.status(200).json({ success: true, message: 'Member removed successfully' });
     } catch (error) {
@@ -1105,8 +919,8 @@ export const leaveGroup = async (req, res) => {
         const { groupId } = req.params;
         const userId = req.id;
 
-        await prisma.conversationParticipant.deleteMany({
-            where: { conversationId: groupId, userId }
+        await Conversation.findByIdAndUpdate(groupId, {
+            $pull: { participants: userId, groupAdmin: userId }
         });
 
         return res.status(200).json({ success: true, message: 'Left group successfully' });
@@ -1121,23 +935,21 @@ export const deleteGroup = async (req, res) => {
         const { groupId } = req.params;
         const adminId = req.id;
 
-        // Check if user is admin
-        const group = await prisma.conversation.findUnique({
-            where: { id: groupId, isGroup: true },
-            include: { participants: true }
-        });
+        const group = await Conversation.findById(groupId);
 
         if (!group) {
             return res.status(404).json({ success: false, message: 'Group not found' });
         }
 
-        const isAdmin = group.participants.some(p => p.userId === adminId);
-        if (!isAdmin) {
-            return res.status(403).json({ success: false, message: 'Not authorized' });
+        if (group.groupOwner.toString() !== adminId) {
+            return res.status(403).json({ success: false, message: 'Only group owner can delete the group' });
         }
 
-        // Delete group and all related data
-        await prisma.conversation.delete({ where: { id: groupId } });
+        // Delete all messages in the conversation
+        await Message.deleteMany({ conversationId: groupId });
+
+        // Delete the conversation
+        await Conversation.findByIdAndDelete(groupId);
 
         return res.status(200).json({ success: true, message: 'Group deleted successfully' });
     } catch (error) {

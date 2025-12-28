@@ -20,14 +20,13 @@ export const SocketProvider = ({ children }) => {
   useEffect(() => {
     if (user && user.token) {
       console.log('🔌 Initializing unified socket connection...');
-      
+
       // Force production URL for deployed version
-      const SOCKET_URL = window.location.hostname === 'sociogram-1.onrender.com' 
-        ? 'https://sociogram-n73b.onrender.com'
-        : import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'https://social-media-pdbl.onrender.com';
-      
+      // Local Socket URL for development
+      const SOCKET_URL = 'http://localhost:8000';
+
       console.log('🌐 Socket connecting to:', SOCKET_URL);
-      
+
       const newSocket = io(SOCKET_URL, {
         auth: {
           token: user.token
@@ -40,7 +39,7 @@ export const SocketProvider = ({ children }) => {
       newSocket.on('connect', () => {
         console.log('✅ Unified socket connected to server');
         setIsConnected(true);
-        
+
         // Join user's personal room
         newSocket.emit('joinUserRoom', { userId: user.id });
       });

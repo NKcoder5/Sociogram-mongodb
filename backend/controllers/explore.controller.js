@@ -1,4 +1,8 @@
-import prisma from "../utils/prisma.js";
+import { Post } from "../models/post.model.js";
+import { User } from "../models/user.model.js";
+import { Follow } from "../models/follow.model.js";
+import { Like } from "../models/like.model.js";
+import { Comment } from "../models/comment.model.js";
 
 export const getExplorePosts = async (req, res) => {
   try {
@@ -6,75 +10,39 @@ export const getExplorePosts = async (req, res) => {
     const { page = 1, limit = 20 } = req.query;
     const skip = (page - 1) * limit;
 
-    // Get posts from users not followed by current user, ordered by engagement
-    const posts = await prisma.post.findMany({
-      where: {
-        author: {
-          followers: {
-            none: {
-              followerId: userId
-            }
-          }
-        },
-        authorId: {
-          not: userId
-        }
-      },
-      include: {
-        author: {
-          select: {
-            id: true,
-            username: true,
-            profilePicture: true
-          }
-        },
-        likes: {
-          select: {
-            userId: true
-          }
-        },
-        comments: {
-          select: {
-            id: true
-          }
-        },
-        _count: {
-          select: {
-            likes: true,
-            comments: true
-          }
-        }
-      },
-      orderBy: [
-        {
-          likes: {
-            _count: 'desc'
-          }
-        },
-        {
-          comments: {
-            _count: 'desc'
-          }
-        },
-        {
-          createdAt: 'desc'
-        }
-      ],
-      skip: parseInt(skip),
-      take: parseInt(limit)
-    });
+    // Get followed user IDs
+    const following = await Follow.find({ followerId: userId }).select('followingId');
+    const followingIds = following.map(f => f.followingId);
 
-    // Add engagement score and user interaction status
-    const postsWithEngagement = posts.map(post => ({
-      ...post,
-      isLiked: post.likes.some(like => like.userId === userId),
-      engagementScore: post._count.likes * 2 + post._count.comments * 3,
-      likes: post._count.likes,
-      comments: post._count.comments
+    // Add current user to exclude their own posts
+    followingIds.push(userId);
+
+    // Get posts from users not followed by current user
+    const posts = await Post.find({
+      author: { $nin: followingIds }
+    })
+      .populate('author', 'id username profilePicture')
+      .sort({ createdAt: -1 }) // Simple sort for now, can be enhanced with engagement
+      .skip(parseInt(skip))
+      .limit(parseInt(limit));
+
+    // Add interaction status and counts
+    const postsWithStatus = await Promise.all(posts.map(async (post) => {
+      const isLiked = await Like.exists({ postId: post._id, userId });
+      const likes = await Like.countDocuments({ postId: post._id });
+      const comments = await Comment.countDocuments({ postId: post._id });
+
+      return {
+        ...post.toObject(),
+        isLiked: !!isLiked,
+        likes,
+        comments,
+        engagementScore: likes * 2 + comments * 3
+      };
     }));
 
     return res.status(200).json({
-      posts: postsWithEngagement,
+      posts: postsWithStatus,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -97,59 +65,36 @@ export const getExploreReels = async (req, res) => {
     const { page = 1, limit = 10 } = req.query;
     const skip = (page - 1) * limit;
 
-    // Get reels (posts with video content) from non-followed users
-    const reels = await prisma.post.findMany({
-      where: {
-        AND: [
-          {
-            author: {
-              followers: {
-                none: {
-                  followerId: userId
-                }
-              }
-            }
-          },
-          {
-            authorId: {
-              not: userId
-            }
-          },
-          {
-            OR: [
-              { image: { contains: '.mp4' } },
-              { image: { contains: '.mov' } },
-              { image: { contains: '.avi' } },
-              { caption: { contains: '#reel' } },
-              { caption: { contains: '#video' } }
-            ]
-          }
-        ]
-      },
-      include: {
-        author: {
-          select: {
-            id: true,
-            username: true,
-            profilePicture: true
-          }
-        },
-        _count: {
-          select: {
-            likes: true,
-            comments: true
-          }
-        }
-      },
-      orderBy: {
-        createdAt: 'desc'
-      },
-      skip: parseInt(skip),
-      take: parseInt(limit)
-    });
+    // Get followed user IDs to exclude
+    const following = await Follow.find({ followerId: userId }).select('followingId');
+    const followingIds = following.map(f => f.followingId);
+    followingIds.push(userId);
+
+    // Get reels (posts with video content or specific hashtags)
+    const reels = await Post.find({
+      author: { $nin: followingIds },
+      $or: [
+        { image: { $regex: /\.(mp4|mov|avi)$/i } },
+        { caption: { $regex: /#(reel|video)/i } }
+      ]
+    })
+      .populate('author', 'id username profilePicture')
+      .sort({ createdAt: -1 })
+      .skip(parseInt(skip))
+      .limit(parseInt(limit));
+
+    const reelsWithStatus = await Promise.all(reels.map(async (reel) => {
+      const likes = await Like.countDocuments({ postId: reel._id });
+      const comments = await Comment.countDocuments({ postId: reel._id });
+      return {
+        ...reel.toObject(),
+        likes,
+        comments
+      };
+    }));
 
     return res.status(200).json({
-      reels,
+      reels: reelsWithStatus,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -170,19 +115,12 @@ export const getTrendingHashtags = async (req, res) => {
   try {
     const { limit = 10 } = req.query;
 
-    // Get hashtags from recent posts and count their usage
-    const posts = await prisma.post.findMany({
-      where: {
-        createdAt: {
-          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) // Last 7 days
-        }
-      },
-      select: {
-        caption: true
-      }
-    });
+    // Get hashtags from recent posts
+    const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const posts = await Post.find({
+      createdAt: { $gte: oneWeekAgo }
+    }).select('caption');
 
-    // Extract hashtags and count them
     const hashtagCounts = {};
     posts.forEach(post => {
       if (post.caption) {
@@ -194,14 +132,13 @@ export const getTrendingHashtags = async (req, res) => {
       }
     });
 
-    // Sort by count and format
     const trendingHashtags = Object.entries(hashtagCounts)
-      .sort(([,a], [,b]) => b - a)
+      .sort(([, a], [, b]) => b - a)
       .slice(0, parseInt(limit))
       .map(([tag, count]) => ({
         tag,
         postCount: count,
-        trending: count > 5 // Mark as trending if used more than 5 times
+        trending: count > 5
       }));
 
     return res.status(200).json({
@@ -232,57 +169,34 @@ export const searchPosts = async (req, res) => {
 
     const searchTerm = q.trim();
 
-    const posts = await prisma.post.findMany({
-      where: {
-        OR: [
-          {
-            caption: {
-              contains: searchTerm,
-              mode: 'insensitive'
-            }
-          },
-          {
-            author: {
-              username: {
-                contains: searchTerm,
-                mode: 'insensitive'
-              }
-            }
-          }
-        ]
-      },
-      include: {
-        author: {
-          select: {
-            id: true,
-            username: true,
-            profilePicture: true
-          }
-        },
-        likes: {
-          where: {
-            userId: userId
-          }
-        },
-        _count: {
-          select: {
-            likes: true,
-            comments: true
-          }
-        }
-      },
-      orderBy: {
-        createdAt: 'desc'
-      },
-      skip: parseInt(skip),
-      take: parseInt(limit)
-    });
+    // In Mongoose, searching across relationships usually requires $lookup or searching authors separately
+    const matchingUsers = await User.find({
+      username: { $regex: searchTerm, $options: 'i' }
+    }).select('_id');
+    const userIds = matchingUsers.map(u => u._id);
 
-    const postsWithStatus = posts.map(post => ({
-      ...post,
-      isLiked: post.likes.length > 0,
-      likes: post._count.likes,
-      comments: post._count.comments
+    const posts = await Post.find({
+      $or: [
+        { caption: { $regex: searchTerm, $options: 'i' } },
+        { author: { $in: userIds } }
+      ]
+    })
+      .populate('author', 'id username profilePicture')
+      .sort({ createdAt: -1 })
+      .skip(parseInt(skip))
+      .limit(parseInt(limit));
+
+    const postsWithStatus = await Promise.all(posts.map(async (post) => {
+      const isLiked = await Like.exists({ postId: post._id, userId });
+      const likes = await Like.countDocuments({ postId: post._id });
+      const comments = await Comment.countDocuments({ postId: post._id });
+
+      return {
+        ...post.toObject(),
+        isLiked: !!isLiked,
+        likes,
+        comments
+      };
     }));
 
     return res.status(200).json({
@@ -309,50 +223,33 @@ export const getExploreUsers = async (req, res) => {
     const userId = req.id;
     const { limit = 10 } = req.query;
 
-    // Get users not followed by current user, ordered by follower count
-    const users = await prisma.user.findMany({
-      where: {
-        AND: [
-          {
-            id: {
-              not: userId
-            }
-          },
-          {
-            followers: {
-              none: {
-                followerId: userId
-              }
-            }
-          }
-        ]
-      },
-      select: {
-        id: true,
-        username: true,
-        profilePicture: true,
-        bio: true,
-        _count: {
-          select: {
-            followers: true,
-            posts: true
-          }
-        }
-      },
-      orderBy: {
-        followers: {
-          _count: 'desc'
-        }
-      },
-      take: parseInt(limit)
-    });
+    // Get followed user IDs to exclude
+    const following = await Follow.find({ followerId: userId }).select('followingId');
+    const followingIds = following.map(f => f.followingId);
+    followingIds.push(userId);
 
-    const usersWithStats = users.map(user => ({
-      ...user,
-      followerCount: user._count.followers,
-      postCount: user._count.posts,
-      isPopular: user._count.followers > 10
+    // Get users not followed by current user
+    const users = await User.find({
+      _id: { $nin: followingIds }
+    })
+      .select('id username profilePicture bio')
+      .limit(parseInt(limit));
+
+    // In Mongoose, we need separate counts or aggregation
+    const usersWithStats = await Promise.all(users.map(async (user) => {
+      const followerCount = await Follow.countDocuments({ followingId: user._id });
+      const postCount = await Post.countDocuments({ author: user._id });
+
+      return {
+        ...user.toObject(),
+        followerCount,
+        postCount,
+        isPopular: followerCount > 10
+      };
     }));
+
+    // Sort by followerCount manually as Mongoose doesn't easily sort by virtual counts in a simple query
+    usersWithStats.sort((a, b) => b.followerCount - a.followerCount);
 
     return res.status(200).json({
       users: usersWithStats,

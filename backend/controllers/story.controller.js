@@ -1,372 +1,208 @@
 import sharp from "sharp";
 import cloudinary from "../utils/cloudinary.js";
-import prisma from "../utils/prisma.js";
+import { Story } from "../models/story.model.js";
+import { StoryView } from "../models/storyView.model.js";
+import { User } from "../models/user.model.js";
+import { Follow } from "../models/follow.model.js";
 
+// Create a new story
 export const createStory = async (req, res) => {
   try {
-    const userId = req.id;
-    const media = req.file;
-    const { text, duration = 24 } = req.body; // Duration in hours
+    const image = req.file;
+    const authorId = req.id;
 
-    if (!media && !text) {
+    if (!image) {
       return res.status(400).json({
-        message: 'Either media or text is required for a story',
+        message: 'Image required',
         success: false
       });
     }
 
-    let mediaUrl = null;
-    let mediaType = 'text';
+    // Image optimization
+    const optimizedImageBuffer = await sharp(image.buffer)
+      .resize({ width: 1080, height: 1920, fit: "inside" })
+      .toFormat("webp")
+      .toBuffer();
 
-    // Process media if provided
-    if (media) {
-      try {
-        let processedBuffer;
-        
-        // Determine media type
-        if (media.mimetype.startsWith('image/')) {
-          mediaType = 'image';
-          processedBuffer = await sharp(media.buffer)
-            .resize({ width: 1080, height: 1920, fit: 'cover' })
-            .toFormat('jpeg', { quality: 85 })
-            .toBuffer();
-        } else if (media.mimetype.startsWith('video/')) {
-          mediaType = 'video';
-          processedBuffer = media.buffer; // For now, upload video as-is
-        } else {
-          return res.status(400).json({
-            message: 'Unsupported media type',
-            success: false
-          });
-        }
-
-        // Upload to Cloudinary
-        const uploadResult = await new Promise((resolve, reject) => {
-          const uploadStream = cloudinary.uploader.upload_stream(
-            {
-              resource_type: mediaType === 'video' ? 'video' : 'image',
-              folder: 'sociogram/stories',
-              transformation: mediaType === 'image' ? [
-                { width: 1080, height: 1920, crop: 'fill' }
-              ] : undefined
-            },
-            (error, result) => {
-              if (error) reject(error);
-              else resolve(result);
-            }
-          );
-          uploadStream.end(processedBuffer);
-        });
-
-        mediaUrl = uploadResult.secure_url;
-      } catch (error) {
-        console.error('Media processing error:', error);
-        return res.status(500).json({
-          message: 'Failed to process media',
-          success: false
-        });
-      }
-    }
-
-    // Calculate expiry time
-    const expiresAt = new Date(Date.now() + duration * 60 * 60 * 1000);
-
-    // Create story in database
-    const story = await prisma.story.create({
-      data: {
-        authorId: userId,
-        mediaUrl,
-        mediaType,
-        text: text || null,
-        expiresAt
-      },
-      include: {
-        author: {
-          select: {
-            id: true,
-            username: true,
-            profilePicture: true
-          }
-        }
-      }
+    // Convert buffer to data URI
+    const fileUri = `data:image/webp;base64,${optimizedImageBuffer.toString("base64")}`;
+    const cloudResponse = await cloudinary.uploader.upload(fileUri, {
+      folder: 'stories'
     });
+
+    // Expires in 24 hours
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 24);
+
+    const story = await Story.create({
+      author: authorId,
+      image: cloudResponse.secure_url,
+      expiresAt
+    });
+
+    const populatedStory = await Story.findById(story._id)
+      .populate('author', 'username profilePicture');
 
     return res.status(201).json({
-      message: 'Story created successfully',
-      story,
+      message: 'New story added',
+      story: populatedStory,
       success: true
     });
+
   } catch (error) {
-    console.error('Error creating story:', error);
+    console.error(error);
     return res.status(500).json({
-      message: 'Failed to create story',
+      message: 'Internal server error',
       success: false
     });
   }
 };
 
+// Get all stories from followed users
 export const getStories = async (req, res) => {
   try {
     const userId = req.id;
-    console.log('📖 Fetching stories for user:', userId);
 
-    // Simplified query - get all non-expired stories for now
-    const stories = await prisma.story.findMany({
-      where: {
-        expiresAt: {
-          gt: new Date()
-        }
-      },
-      include: {
-        author: {
-          select: {
-            id: true,
-            username: true,
-            profilePicture: true
-          }
-        },
-        views: {
-          where: {
-            userId: userId
-          }
-        },
-        _count: {
-          select: {
-            views: true
-          }
-        }
-      },
-      orderBy: {
-        createdAt: 'desc'
-      }
-    });
+    // Get followed user IDs
+    const following = await Follow.find({
+      followerId: userId
+    }).select('followingId');
 
-    console.log('📖 Found', stories.length, 'stories');
+    const followingIds = following.map(f => f.followingId);
+    // Include self
+    followingIds.push(userId);
+
+    const now = new Date();
+    const stories = await Story.find({
+      author: { $in: followingIds },
+      expiresAt: { $gt: now }
+    })
+      .populate('author', 'username profilePicture')
+      .sort({ createdAt: -1 });
 
     // Group stories by user
     const groupedStories = stories.reduce((acc, story) => {
-      const authorId = story.author.id;
+      const authorId = story.author._id.toString();
       if (!acc[authorId]) {
         acc[authorId] = {
           user: story.author,
-          stories: [],
-          hasUnviewed: false,
-          isOwn: authorId === userId
+          stories: []
         };
       }
-      
-      const isViewed = story.views.length > 0;
-      acc[authorId].stories.push({
-        ...story,
-        isViewed,
-        viewCount: story._count.views
-      });
-      
-      if (!isViewed) {
-        acc[authorId].hasUnviewed = true;
-      }
-      
+      acc[authorId].stories.push(story);
       return acc;
     }, {});
 
-    // Convert to array and sort (own stories first, then by unviewed status)
-    const storyGroups = Object.values(groupedStories).sort((a, b) => {
-      if (a.isOwn && !b.isOwn) return -1;
-      if (!a.isOwn && b.isOwn) return 1;
-      if (a.hasUnviewed && !b.hasUnviewed) return -1;
-      if (!a.hasUnviewed && b.hasUnviewed) return 1;
-      return 0;
-    });
-
     return res.status(200).json({
-      storyGroups,
+      stories: Object.values(groupedStories),
       success: true
     });
+
   } catch (error) {
-    console.error('Error fetching stories:', error);
+    console.error(error);
     return res.status(500).json({
-      message: 'Failed to fetch stories',
+      message: 'Internal server error',
       success: false
     });
   }
 };
 
+// Get stories of a specific user
 export const getUserStories = async (req, res) => {
   try {
-    const { userId: targetUserId } = req.params;
-    const currentUserId = req.id;
+    const { userId } = req.params;
+    const now = new Date();
 
-    // Check if user can view these stories (following or own)
-    const canView = targetUserId === currentUserId || await prisma.follow.findFirst({
-      where: {
-        followerId: currentUserId,
-        followingId: targetUserId
-      }
-    });
-
-    if (!canView) {
-      return res.status(403).json({
-        message: 'You cannot view this user\'s stories',
-        success: false
-      });
-    }
-
-    const stories = await prisma.story.findMany({
-      where: {
-        authorId: targetUserId,
-        expiresAt: {
-          gt: new Date()
-        }
-      },
-      include: {
-        author: {
-          select: {
-            id: true,
-            username: true,
-            profilePicture: true
-          }
-        },
-        views: {
-          where: {
-            userId: currentUserId
-          }
-        },
-        _count: {
-          select: {
-            views: true
-          }
-        }
-      },
-      orderBy: {
-        createdAt: 'asc'
-      }
-    });
-
-    const storiesWithStatus = stories.map(story => ({
-      ...story,
-      isViewed: story.views.length > 0,
-      viewCount: story._count.views
-    }));
+    const stories = await Story.find({
+      author: userId,
+      expiresAt: { $gt: now }
+    })
+      .populate('author', 'username profilePicture')
+      .sort({ createdAt: -1 });
 
     return res.status(200).json({
-      stories: storiesWithStatus,
-      user: stories[0]?.author || null,
+      stories,
       success: true
     });
+
   } catch (error) {
-    console.error('Error fetching user stories:', error);
+    console.error(error);
     return res.status(500).json({
-      message: 'Failed to fetch user stories',
+      message: 'Internal server error',
       success: false
     });
   }
 };
 
+// Mark story as viewed
 export const markStoryAsViewed = async (req, res) => {
   try {
-    const { storyId } = req.params;
     const userId = req.id;
+    const { storyId } = req.params;
 
-    // Check if story exists and is not expired
-    const story = await prisma.story.findFirst({
-      where: {
-        id: storyId,
-        expiresAt: {
-          gt: new Date()
-        }
-      }
+    // Check if already viewed
+    const existingView = await StoryView.findOne({
+      story: storyId,
+      viewer: userId
     });
 
-    if (!story) {
-      return res.status(404).json({
-        message: 'Story not found or expired',
-        success: false
+    if (!existingView) {
+      await StoryView.create({
+        story: storyId,
+        viewer: userId
       });
     }
-
-    // Don't track views for own stories
-    if (story.authorId === userId) {
-      return res.status(200).json({
-        message: 'Own story view not tracked',
-        success: true
-      });
-    }
-
-    // Create or update view record
-    await prisma.storyView.upsert({
-      where: {
-        storyId_userId: {
-          storyId,
-          userId
-        }
-      },
-      update: {
-        viewedAt: new Date()
-      },
-      create: {
-        storyId,
-        userId,
-        viewedAt: new Date()
-      }
-    });
 
     return res.status(200).json({
       message: 'Story marked as viewed',
       success: true
     });
+
   } catch (error) {
-    console.error('Error marking story as viewed:', error);
+    console.error(error);
     return res.status(500).json({
-      message: 'Failed to mark story as viewed',
+      message: 'Internal server error',
       success: false
     });
   }
 };
 
+// Delete story
 export const deleteStory = async (req, res) => {
   try {
-    const { storyId } = req.params;
     const userId = req.id;
+    const { storyId } = req.params;
 
-    // Check if story exists and belongs to user
-    const story = await prisma.story.findFirst({
-      where: {
-        id: storyId,
-        authorId: userId
-      }
-    });
+    const story = await Story.findById(storyId);
 
     if (!story) {
       return res.status(404).json({
-        message: 'Story not found or you don\'t have permission to delete it',
+        message: 'Story not found',
         success: false
       });
     }
 
-    // Delete story views first
-    await prisma.storyView.deleteMany({
-      where: {
-        storyId
-      }
-    });
+    // Only author can delete
+    if (story.author.toString() !== userId) {
+      return res.status(403).json({
+        message: 'Unauthorized',
+        success: false
+      });
+    }
 
-    // Delete story
-    await prisma.story.delete({
-      where: {
-        id: storyId
-      }
-    });
-
-    // TODO: Delete media from Cloudinary if needed
+    // Delete views and story
+    await StoryView.deleteMany({ story: storyId });
+    await Story.findByIdAndDelete(storyId);
 
     return res.status(200).json({
-      message: 'Story deleted successfully',
+      message: 'Story deleted',
       success: true
     });
+
   } catch (error) {
-    console.error('Error deleting story:', error);
+    console.error(error);
     return res.status(500).json({
-      message: 'Failed to delete story',
+      message: 'Internal server error',
       success: false
     });
   }

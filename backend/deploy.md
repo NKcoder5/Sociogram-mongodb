@@ -1,50 +1,39 @@
-# Deployment Steps to Fix 500 Error
+# Deployment Steps for Mongoose Migration
 
 ## Problem
-Your backend was trying to connect to a local PostgreSQL database (`localhost:5432`) instead of your Render PostgreSQL database.
+The backend was originally configured for PostgreSQL using Prisma, which caused issues during local development and deployment when trying to connect to a NoSQL MongoDB Atlas instance.
 
 ## Solution Applied
-✅ Updated `DATABASE_URL` in `.env` to use your Render PostgreSQL database:
-```
-postgresql://sociogram_db_user:D3qLzUo9yUrOLNR4xNZOPhmMOxZx45fQ@dpg-d3cnqgfdiees7384u2u0-a/sociogram_db
-```
+✅ Migrated the database from PostgreSQL (Prisma) to MongoDB (Mongoose).
+✅ All controllers have been refactored to use Mongoose models.
+✅ All seed scripts and utility functions have been updated.
+✅ Prisma and PostgreSQL dependencies have been removed.
 
 ## Next Steps
 
-### 1. Deploy Updated Code to Render
-- Push your updated code to your Git repository
-- Render will automatically redeploy with the new database connection
+### 1. Environment Variables
+Make sure these environment variables are set in your Render service (or locally in `.env`):
+- `DATABASE_URL`: Your MongoDB Atlas connection string (e.g., `mongodb+srv://...`)
+- `SECRET_KEY`: Your JWT secret key
+- `NODE_ENV`: `production` or `development`
+- `CLOUDINARY_CLOUD_NAME`: your_cloud_name
+- `CLOUDINARY_API_KEY`: your_api_key
+- `CLOUDINARY_API_SECRET`: your_api_secret
 
-### 2. Run Database Migrations (IMPORTANT!)
-After deployment, you need to ensure your database schema is up to date:
-
-```bash
-# In your Render service console or locally with production DATABASE_URL:
-npx prisma migrate deploy
-npx prisma generate
-```
-
-### 3. Verify Database Connection
+### 2. Verify Database Connection
 You can test the connection by visiting:
-- `https://sociogram-n73b.onrender.com/health` - Should return healthy status
-- `https://sociogram-n73b.onrender.com/` - Should return API info
+- `/health` - Should return healthy status and "Mongoose connected"
+- `/` - Should return API info
 
-### 4. Environment Variables in Render
-Make sure these environment variables are set in your Render service:
-- `DATABASE_URL`: postgresql://sociogram_db_user:D3qLzUo9yUrOLNR4xNZOPhmMOxZx45fQ@dpg-d3cnqgfdiees7384u2u0-a/sociogram_db
-- `SECRET_KEY`: your_super_secret_jwt_key_here_make_it_long_and_secure_sociogram_2025
-- `NODE_ENV`: production
-- `CLOUDINARY_CLOUD_NAME`: dhnm18vip
-- `CLOUDINARY_API_KEY`: 796749771261874
-- `CLOUDINARY_API_SECRET`: kberCNHyCLAlX9tvYe_8PS_fc6Q
+### 3. Database Seeding
+If you need to seed the database with initial data:
+```bash
+npm run seed
+```
+This will run the improved seed script which creates realistic dummy data.
 
-## What Was Wrong
-The login endpoint was failing because:
-1. Backend couldn't connect to database (wrong DATABASE_URL)
-2. All database operations in the login function were failing
-3. This caused the 500 Internal Server Error
-
-## After Fix
-- Login should work properly
-- Database operations will succeed
-- 500 errors should be resolved
+## Benefits of the Migration
+- Native support for the MongoDB Atlas database.
+- Faster development with Mongoose ODM.
+- Simplified deployment without needing a relational schema management tool like Prisma.
+- Easier scaling with MongoDB's flexible schema.

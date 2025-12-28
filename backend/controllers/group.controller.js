@@ -1,7 +1,7 @@
-import { PrismaClient } from '@prisma/client';
-import { getSocketInstance } from '../config/socket.js';
-
-const prisma = new PrismaClient();
+import { Conversation } from "../models/conversation.model.js";
+import { User } from "../models/user.model.js";
+import { Message } from "../models/message.model.js";
+import { getSocketInstance } from "../config/socket.js";
 
 // Create a new group
 export const createGroup = async (req, res) => {
@@ -17,10 +17,9 @@ export const createGroup = async (req, res) => {
         }
 
         // Validate participants exist
-        const validParticipants = await prisma.user.findMany({
-            where: { id: { in: participants } },
-            select: { id: true, username: true, profilePicture: true }
-        });
+        const validParticipants = await User.find({
+            _id: { $in: participants }
+        }).select('id username profilePicture');
 
         if (validParticipants.length !== participants.length) {
             return res.status(400).json({
@@ -29,61 +28,34 @@ export const createGroup = async (req, res) => {
             });
         }
 
-        // Create group conversation with transaction
-        const groupConversation = await prisma.conversation.create({
-            data: {
-                name: name,
-                description: description || null,
-                isGroup: true,
-                groupOwnerId: userId,
-                participants: {
-                    create: [userId, ...participants].map(participantId => ({
-                        userId: participantId
-                    }))
-                },
-                groupAdmins: {
-                    create: {
-                        userId: userId
-                    }
-                },
-                groupSettings: {
-                    create: {
-                        isPrivate: settings?.isPrivate || false,
-                        allowMemberInvites: settings?.allowMemberInvites || true,
-                        requireApproval: settings?.requireApproval || false,
-                        muteNotifications: settings?.muteNotifications || false
-                    }
-                }
-            },
-            include: {
-                participants: {
-                    include: {
-                        user: {
-                            select: { id: true, username: true, profilePicture: true }
-                        }
-                    }
-                },
-                groupOwner: {
-                    select: { id: true, username: true, profilePicture: true }
-                },
-                groupAdmins: {
-                    include: {
-                        user: {
-                            select: { id: true, username: true, profilePicture: true }
-                        }
-                    }
-                },
-                groupSettings: true
+        // Create group conversation
+        const groupConversation = await Conversation.create({
+            groupName: name,
+            groupDescription: description || null,
+            isGroupChat: true,
+            groupOwner: userId,
+            participants: [userId, ...participants],
+            groupAdmin: [userId],
+            groupSettings: {
+                isPrivate: settings?.isPrivate || false,
+                allowMemberInvites: settings?.allowMemberInvites || true,
+                requireApproval: settings?.requireApproval || false,
+                muteNotifications: settings?.muteNotifications || false
             }
         });
+
+        const populatedGroup = await Conversation.findById(groupConversation._id)
+            .populate('participants', 'id username profilePicture')
+            .populate('groupOwner', 'id username profilePicture')
+            .populate('groupAdmin', 'id username profilePicture');
 
         // Emit socket event for real-time updates
         try {
             const io = getSocketInstance();
             const participantIds = [userId, ...participants];
-            io.emit('groupCreated', { 
-                group: groupConversation, 
-                participantIds 
+            io.emit('groupCreated', {
+                group: populatedGroup,
+                participantIds
             });
         } catch (socketError) {
             console.error('Socket emission error:', socketError);
@@ -92,7 +64,7 @@ export const createGroup = async (req, res) => {
         res.status(201).json({
             success: true,
             message: "Group created successfully",
-            group: groupConversation
+            group: populatedGroup
         });
 
     } catch (error) {
@@ -109,55 +81,25 @@ export const getUserGroups = async (req, res) => {
     try {
         const userId = req.id;
 
-        const groups = await prisma.conversation.findMany({
-            where: {
-                participants: {
-                    some: { userId: userId }
-                },
-                isGroup: true
-            },
-            include: {
-                participants: {
-                    include: {
-                        user: {
-                            select: { id: true, username: true, profilePicture: true }
-                        }
-                    }
-                },
-                groupOwner: {
-                    select: { id: true, username: true, profilePicture: true }
-                },
-                groupAdmins: {
-                    include: {
-                        user: {
-                            select: { id: true, username: true, profilePicture: true }
-                        }
-                    }
-                },
-                groupSettings: true,
-                messages: {
-                    orderBy: { createdAt: 'desc' },
-                    take: 1,
-                    include: {
-                        sender: {
-                            select: { id: true, username: true, profilePicture: true }
-                        }
-                    }
+        const groups = await Conversation.find({
+            participants: { $in: [userId] },
+            isGroupChat: true
+        })
+            .populate('participants', 'id username profilePicture')
+            .populate('groupOwner', 'id username profilePicture')
+            .populate('groupAdmin', 'id username profilePicture')
+            .populate({
+                path: 'lastMessage',
+                populate: {
+                    path: 'senderId',
+                    select: 'id username profilePicture'
                 }
-            },
-            orderBy: { updatedAt: 'desc' }
-        });
-
-        // Transform to include lastMessage
-        const transformedGroups = groups.map(group => ({
-            ...group,
-            lastMessage: group.messages[0] || null,
-            messages: undefined
-        }));
+            })
+            .sort({ updatedAt: -1 });
 
         res.status(200).json({
             success: true,
-            groups: transformedGroups
+            groups
         });
 
     } catch (error) {
@@ -176,17 +118,9 @@ export const addMemberToGroup = async (req, res) => {
         const { userId: newMemberId } = req.body;
         const currentUserId = req.id;
 
-        const group = await prisma.conversation.findUnique({
-            where: { id: groupId },
-            include: {
-                participants: true,
-                groupOwner: true,
-                groupAdmins: true,
-                groupSettings: true
-            }
-        });
+        const group = await Conversation.findById(groupId);
 
-        if (!group || !group.isGroup) {
+        if (!group || !group.isGroupChat) {
             return res.status(404).json({
                 success: false,
                 message: "Group not found"
@@ -194,8 +128,8 @@ export const addMemberToGroup = async (req, res) => {
         }
 
         // Check if user has permission to add members
-        const isOwner = group.groupOwnerId === currentUserId;
-        const isAdmin = group.groupAdmins.some(admin => admin.userId === currentUserId);
+        const isOwner = group.groupOwner.toString() === currentUserId;
+        const isAdmin = group.groupAdmin.some(adminId => adminId.toString() === currentUserId);
         const canAddMembers = isOwner || isAdmin || group.groupSettings?.allowMemberInvites;
 
         if (!canAddMembers) {
@@ -206,7 +140,7 @@ export const addMemberToGroup = async (req, res) => {
         }
 
         // Check if user is already a member
-        const isAlreadyMember = group.participants.some(p => p.userId === newMemberId);
+        const isAlreadyMember = group.participants.some(pId => pId.toString() === newMemberId);
         if (isAlreadyMember) {
             return res.status(400).json({
                 success: false,
@@ -215,56 +149,37 @@ export const addMemberToGroup = async (req, res) => {
         }
 
         // Add member
-        await prisma.conversationParticipant.create({
-            data: {
-                conversationId: groupId,
-                userId: newMemberId
-            }
-        });
+        group.participants.push(newMemberId);
+        await group.save();
 
         // Create system message
-        await prisma.message.create({
-            data: {
-                content: `User added to the group`,
-                senderId: currentUserId,
-                conversationId: groupId,
-                messageType: 'system'
-            }
+        const systemMessage = await Message.create({
+            message: `User added to the group`,
+            senderId: currentUserId,
+            conversationId: groupId,
+            messageType: 'text', // Using text for system messages if 'system' type not in enum
+            isAI: false
         });
 
+        // Update last message
+        group.lastMessage = systemMessage._id;
+        group.messages.push(systemMessage._id);
+        await group.save();
+
         // Get updated group with all relations
-        const updatedGroup = await prisma.conversation.findUnique({
-            where: { id: groupId },
-            include: {
-                participants: {
-                    include: {
-                        user: {
-                            select: { id: true, username: true, profilePicture: true }
-                        }
-                    }
-                },
-                groupOwner: {
-                    select: { id: true, username: true, profilePicture: true }
-                },
-                groupAdmins: {
-                    include: {
-                        user: {
-                            select: { id: true, username: true, profilePicture: true }
-                        }
-                    }
-                },
-                groupSettings: true
-            }
-        });
+        const updatedGroup = await Conversation.findById(groupId)
+            .populate('participants', 'id username profilePicture')
+            .populate('groupOwner', 'id username profilePicture')
+            .populate('groupAdmin', 'id username profilePicture');
 
         // Emit socket event
         try {
             const io = getSocketInstance();
-            const participantIds = updatedGroup.participants.map(p => p.userId);
-            io.emit('memberAdded', { 
-                group: updatedGroup, 
+            const participantIds = updatedGroup.participants.map(p => p._id.toString());
+            io.emit('memberAdded', {
+                group: updatedGroup,
                 newMemberId,
-                participantIds 
+                participantIds
             });
         } catch (socketError) {
             console.error('Socket emission error:', socketError);
@@ -301,8 +216,8 @@ export const removeMemberFromGroup = async (req, res) => {
         }
 
         // Check permissions
-        const isOwner = group.groupOwner.equals(currentUserId);
-        const isAdmin = group.groupAdmin.includes(currentUserId);
+        const isOwner = group.groupOwner.toString() === currentUserId;
+        const isAdmin = group.groupAdmin.some(adminId => adminId.toString() === currentUserId);
         const isSelf = currentUserId === memberToRemove;
 
         if (!isOwner && !isAdmin && !isSelf) {
@@ -313,7 +228,7 @@ export const removeMemberFromGroup = async (req, res) => {
         }
 
         // Can't remove owner
-        if (group.groupOwner.equals(memberToRemove) && !isSelf) {
+        if (group.groupOwner.toString() === memberToRemove && !isSelf) {
             return res.status(403).json({
                 success: false,
                 message: "Cannot remove group owner"
@@ -321,23 +236,25 @@ export const removeMemberFromGroup = async (req, res) => {
         }
 
         // Remove member
-        group.participants = group.participants.filter(p => !p.equals(memberToRemove));
-        group.groupAdmin = group.groupAdmin.filter(a => !a.equals(memberToRemove));
-        await group.save();
+        group.participants = group.participants.filter(pId => pId.toString() !== memberToRemove);
+        group.groupAdmin = group.groupAdmin.filter(aId => aId.toString() !== memberToRemove);
 
         // Create system message
-        const systemMessage = new Message({
-            content: isSelf ? `User left the group` : `User was removed from the group`,
+        const systemMessage = await Message.create({
+            message: isSelf ? `User left the group` : `User was removed from the group`,
             senderId: currentUserId,
             conversationId: groupId,
-            messageType: 'system'
+            messageType: 'text'
         });
-        await systemMessage.save();
+
+        group.lastMessage = systemMessage._id;
+        group.messages.push(systemMessage._id);
+        await group.save();
 
         const populatedGroup = await Conversation.findById(groupId)
-            .populate('participants', 'username profilePicture')
-            .populate('groupOwner', 'username profilePicture')
-            .populate('groupAdmin', 'username profilePicture');
+            .populate('participants', 'id username profilePicture')
+            .populate('groupOwner', 'id username profilePicture')
+            .populate('groupAdmin', 'id username profilePicture');
 
         res.status(200).json({
             success: true,
@@ -370,8 +287,8 @@ export const updateGroupInfo = async (req, res) => {
         }
 
         // Check permissions
-        const isOwner = group.groupOwner.equals(currentUserId);
-        const isAdmin = group.groupAdmin.includes(currentUserId);
+        const isOwner = group.groupOwner.toString() === currentUserId;
+        const isAdmin = group.groupAdmin.some(adminId => adminId.toString() === currentUserId);
 
         if (!isOwner && !isAdmin) {
             return res.status(403).json({
@@ -390,9 +307,9 @@ export const updateGroupInfo = async (req, res) => {
         await group.save();
 
         const populatedGroup = await Conversation.findById(groupId)
-            .populate('participants', 'username profilePicture')
-            .populate('groupOwner', 'username profilePicture')
-            .populate('groupAdmin', 'username profilePicture');
+            .populate('participants', 'id username profilePicture')
+            .populate('groupOwner', 'id username profilePicture')
+            .populate('groupAdmin', 'id username profilePicture');
 
         res.status(200).json({
             success: true,
@@ -415,15 +332,9 @@ export const deleteGroup = async (req, res) => {
         const { groupId } = req.params;
         const currentUserId = req.id;
 
-        const group = await prisma.conversation.findUnique({
-            where: { id: groupId },
-            include: {
-                participants: true,
-                groupOwner: true
-            }
-        });
+        const group = await Conversation.findById(groupId);
 
-        if (!group || !group.isGroup) {
+        if (!group || !group.isGroupChat) {
             return res.status(404).json({
                 success: false,
                 message: "Group not found"
@@ -431,27 +342,26 @@ export const deleteGroup = async (req, res) => {
         }
 
         // Only owner can delete group
-        if (group.groupOwnerId !== currentUserId) {
+        if (group.groupOwner.toString() !== currentUserId) {
             return res.status(403).json({
                 success: false,
                 message: "Only group owner can delete the group"
             });
         }
 
-        // Get participant IDs for socket emission
-        const participantIds = group.participants.map(p => p.userId);
+        const participantIds = group.participants.map(p => p.toString());
 
-        // Delete the group (cascade will handle related records)
-        await prisma.conversation.delete({
-            where: { id: groupId }
-        });
+        // Delete the group
+        await Conversation.deleteOne({ _id: groupId });
+        // Cascade delete messages
+        await Message.deleteMany({ conversationId: groupId });
 
         // Emit socket event
         try {
             const io = getSocketInstance();
-            io.emit('groupDeleted', { 
+            io.emit('groupDeleted', {
                 groupId,
-                participantIds 
+                participantIds
             });
         } catch (socketError) {
             console.error('Socket emission error:', socketError);
@@ -487,7 +397,7 @@ export const makeAdmin = async (req, res) => {
         }
 
         // Only owner can make admins
-        if (!group.groupOwner.equals(currentUserId)) {
+        if (group.groupOwner.toString() !== currentUserId) {
             return res.status(403).json({
                 success: false,
                 message: "Only group owner can make admins"
@@ -495,7 +405,8 @@ export const makeAdmin = async (req, res) => {
         }
 
         // Check if user is a member
-        if (!group.participants.includes(newAdminId)) {
+        const isMember = group.participants.some(pId => pId.toString() === newAdminId);
+        if (!isMember) {
             return res.status(400).json({
                 success: false,
                 message: "User is not a member of this group"
@@ -503,15 +414,15 @@ export const makeAdmin = async (req, res) => {
         }
 
         // Add to admin list if not already admin
-        if (!group.groupAdmin.includes(newAdminId)) {
+        if (!group.groupAdmin.some(aId => aId.toString() === newAdminId)) {
             group.groupAdmin.push(newAdminId);
             await group.save();
         }
 
         const populatedGroup = await Conversation.findById(groupId)
-            .populate('participants', 'username profilePicture')
-            .populate('groupOwner', 'username profilePicture')
-            .populate('groupAdmin', 'username profilePicture');
+            .populate('participants', 'id username profilePicture')
+            .populate('groupOwner', 'id username profilePicture')
+            .populate('groupAdmin', 'id username profilePicture');
 
         res.status(200).json({
             success: true,
@@ -544,7 +455,7 @@ export const removeAdmin = async (req, res) => {
         }
 
         // Only owner can remove admins
-        if (!group.groupOwner.equals(currentUserId)) {
+        if (group.groupOwner.toString() !== currentUserId) {
             return res.status(403).json({
                 success: false,
                 message: "Only group owner can remove admins"
@@ -552,7 +463,7 @@ export const removeAdmin = async (req, res) => {
         }
 
         // Can't remove owner from admin
-        if (group.groupOwner.equals(adminToRemove)) {
+        if (group.groupOwner.toString() === adminToRemove) {
             return res.status(400).json({
                 success: false,
                 message: "Cannot remove owner from admin role"
@@ -560,13 +471,13 @@ export const removeAdmin = async (req, res) => {
         }
 
         // Remove from admin list
-        group.groupAdmin = group.groupAdmin.filter(a => !a.equals(adminToRemove));
+        group.groupAdmin = group.groupAdmin.filter(aId => aId.toString() !== adminToRemove);
         await group.save();
 
         const populatedGroup = await Conversation.findById(groupId)
-            .populate('participants', 'username profilePicture')
-            .populate('groupOwner', 'username profilePicture')
-            .populate('groupAdmin', 'username profilePicture');
+            .populate('participants', 'id username profilePicture')
+            .populate('groupOwner', 'id username profilePicture')
+            .populate('groupAdmin', 'id username profilePicture');
 
         res.status(200).json({
             success: true,

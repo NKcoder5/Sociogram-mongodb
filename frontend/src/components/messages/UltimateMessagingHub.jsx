@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
-import { 
-  SparklesIcon, 
+import {
+  SparklesIcon,
   MagnifyingGlassIcon,
   UserGroupIcon,
   ChatBubbleLeftIcon,
@@ -32,9 +32,8 @@ import { useFollow } from '../../context/FollowContext';
 import { useSocket } from '../../context/SocketContext';
 
 // Force production URL for deployed version
-const SOCKET_URL = window.location.hostname === 'sociogram-1.onrender.com' 
-  ? 'https://sociogram-n73b.onrender.com'
-  : import.meta.env.VITE_SOCKET_URL || 'https://social-media-pdbl.onrender.com';
+// Local Socket URL for development
+const SOCKET_URL = 'http://localhost:8000';
 
 // Image component with fallback for failed loads
 const ImageWithFallback = ({ src, alt, fileName, onClick }) => {
@@ -66,8 +65,8 @@ const ImageWithFallback = ({ src, alt, fileName, onClick }) => {
   }
 
   return (
-    <img 
-      src={src} 
+    <img
+      src={src}
       alt={alt}
       className="max-w-xs max-h-64 rounded-lg cursor-pointer hover:opacity-90 transition-opacity object-cover"
       onClick={onClick}
@@ -81,7 +80,7 @@ const UltimateMessagingHub = () => {
   const { user } = useAuth();
   const { followingUsers } = useFollow();
   const { socket, isConnected, joinConversation, leaveConversation, sendMessage, sendTyping } = useSocket();
-  
+
   // Core state
   const [conversations, setConversations] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -92,7 +91,7 @@ const UltimateMessagingHub = () => {
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('conversations');
-  
+
   // Feature states
   const [showAIAssistant, setShowAIAssistant] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -102,7 +101,7 @@ const UltimateMessagingHub = () => {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [imageModal, setImageModal] = useState({ show: false, src: '', alt: '' });
   const [fileViewerData, setFileViewerData] = useState(null);
-  
+
   // Message features
   const [replyingTo, setReplyingTo] = useState(null);
   const [editingMessage, setEditingMessage] = useState(null);
@@ -111,20 +110,20 @@ const UltimateMessagingHub = () => {
   const [messageReactions, setMessageReactions] = useState({});
   const [typingUsers, setTypingUsers] = useState([]);
   const [onlineUsers, setOnlineUsers] = useState(new Set());
-  
+
   // Enhanced file handling
   const [selectedFile, setSelectedFile] = useState(null);
   const [filePreview, setFilePreview] = useState(null);
   const [showFileOptions, setShowFileOptions] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
-  
+
   // Voice & Video
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState(null);
   const [inCall, setInCall] = useState(false);
   const [callType, setCallType] = useState(null);
-  
+
   const typingTimeoutRef = useRef(null);
   const messagesEndRef = useRef(null);
   const fileOptionsRef = useRef(null);
@@ -239,13 +238,13 @@ const UltimateMessagingHub = () => {
     document.addEventListener('keydown', handleEscKey);
     return () => document.removeEventListener('keydown', handleEscKey);
   }, [
-    imageModal.show, 
-    isRecording, 
-    showAIAssistant, 
-    showSearch, 
-    showFileViewer, 
+    imageModal.show,
+    isRecording,
+    showAIAssistant,
+    showSearch,
+    showFileViewer,
     showFileOptions,
-    Boolean(replyingTo), 
+    Boolean(replyingTo),
     Boolean(editingMessage)
   ]);
 
@@ -281,15 +280,15 @@ const UltimateMessagingHub = () => {
         messageAPI.getConversations(),
         authAPI.getFollowing(user.id)
       ]);
-      
+
       console.log('📊 Conversations API response:', conversationsRes.data);
       console.log('📊 Following API response:', followedRes.data);
-      
+
       // Deduplicate conversations by ID
-      const uniqueConversations = (conversationsRes.data.conversations || []).filter((conv, index, self) => 
+      const uniqueConversations = (conversationsRes.data.conversations || []).filter((conv, index, self) =>
         index === self.findIndex(c => c.id === conv.id)
       );
-      
+
       console.log('💬 Unique conversations loaded:', uniqueConversations.length);
       console.log('💬 Conversation details:', uniqueConversations.map(c => ({
         id: c.id,
@@ -297,14 +296,14 @@ const UltimateMessagingHub = () => {
         participants: c.participants?.length || 0,
         lastMessage: c.lastMessage?.content || 'No messages'
       })));
-      
+
       setConversations(uniqueConversations);
       setFollowedUsers(followedRes.data.following || []);
-      
+
       // Load groups from conversations
       const groupConversations = uniqueConversations.filter(conv => conv.isGroup);
       setGroups(groupConversations);
-      
+
       console.log('✅ Initial data loaded successfully');
     } catch (error) {
       console.error('❌ Error loading initial data:', error);
@@ -316,45 +315,45 @@ const UltimateMessagingHub = () => {
 
   const handleNewMessage = (message) => {
     console.log('📨 Processing new message:', message);
-    
+
     // Skip AI messages (they're handled separately)
     if (selectedConversation?.isAI) {
       console.log('🤖 Skipping socket message for AI conversation');
       return;
     }
-    
+
     // Add message if it's for current conversation (and not AI)
     if (message.conversationId === selectedConversation?.id && !selectedConversation?.isAI) {
       setMessages(prev => {
         // Check for duplicates by ID or temporary ID
-        const isDuplicate = prev.find(m => 
-          m.id === message.id || 
+        const isDuplicate = prev.find(m =>
+          m.id === message.id ||
           (m.tempId && m.tempId === message.tempId) ||
-          (m.message === message.message && m.senderId === message.senderId && 
-           Math.abs(new Date(m.createdAt) - new Date(message.createdAt)) < 5000)
+          (m.message === message.message && m.senderId === message.senderId &&
+            Math.abs(new Date(m.createdAt) - new Date(message.createdAt)) < 5000)
         );
-        
+
         if (isDuplicate) {
           console.log('Duplicate message ignored');
           return prev;
         }
-        
+
         console.log('Adding new message to UI');
         return [...prev, message];
       });
-      
+
       // Update conversation list with latest message
-      setConversations(prev => prev.map(conv => 
-        conv.id === message.conversationId 
+      setConversations(prev => prev.map(conv =>
+        conv.id === message.conversationId
           ? { ...conv, lastMessage: message, updatedAt: message.createdAt }
           : conv
       ));
-      
+
       setTimeout(scrollToBottom, 100);
     } else {
       // Update conversation list for other conversations
-      setConversations(prev => prev.map(conv => 
-        conv.id === message.conversationId 
+      setConversations(prev => prev.map(conv =>
+        conv.id === message.conversationId
           ? { ...conv, lastMessage: message, updatedAt: message.createdAt, unreadCount: (conv.unreadCount || 0) + 1 }
           : conv
       ));
@@ -363,16 +362,16 @@ const UltimateMessagingHub = () => {
 
   const handleMessageReactionFromSocket = ({ messageId, emoji, userId, action }) => {
     console.log('🎭 Handling reaction:', { messageId, emoji, userId, action });
-    
+
     setMessageReactions(prev => {
       const currentReactions = prev[messageId] || {};
       const currentEmojiUsers = currentReactions[emoji] || [];
-      
+
       let updatedEmojiUsers;
       if (action === 'add') {
         // Add user if not already present
-        updatedEmojiUsers = currentEmojiUsers.includes(userId) 
-          ? currentEmojiUsers 
+        updatedEmojiUsers = currentEmojiUsers.includes(userId)
+          ? currentEmojiUsers
           : [...currentEmojiUsers, userId];
       } else if (action === 'remove') {
         // Remove user
@@ -383,7 +382,7 @@ const UltimateMessagingHub = () => {
           ? currentEmojiUsers.filter(id => id !== userId)
           : [...currentEmojiUsers, userId];
       }
-      
+
       const newReactions = {
         ...prev,
         [messageId]: {
@@ -391,7 +390,7 @@ const UltimateMessagingHub = () => {
           [emoji]: updatedEmojiUsers
         }
       };
-      
+
       console.log('🎭 Updated reactions:', newReactions);
       return newReactions;
     });
@@ -399,7 +398,7 @@ const UltimateMessagingHub = () => {
 
   const handleTyping = ({ senderId, isTyping }) => {
     if (senderId === user.id) return;
-    
+
     setTypingUsers(prev => {
       if (isTyping) {
         return prev.includes(senderId) ? prev : [...prev, senderId];
@@ -455,7 +454,7 @@ const UltimateMessagingHub = () => {
 
       mediaRecorder.start();
       setIsRecording(true);
-      
+
       // Auto-stop after 60 seconds
       setTimeout(() => {
         if (mediaRecorder.state === 'recording') {
@@ -486,7 +485,7 @@ const UltimateMessagingHub = () => {
       if (window.currentMediaRecorder && window.currentMediaRecorder.state === 'recording') {
         window.currentMediaRecorder.stop();
       }
-      
+
       // Stop all audio tracks
       if (window.currentMediaStream) {
         window.currentMediaStream.getTracks().forEach(track => {
@@ -495,14 +494,14 @@ const UltimateMessagingHub = () => {
         });
         window.currentMediaStream = null;
       }
-      
+
       // Clean up recorder reference
       window.currentMediaRecorder = null;
-      
+
       // Reset states
       setIsRecording(false);
       setAudioBlob(null);
-      
+
       console.log('Voice recording cancelled and cleaned up');
     } catch (error) {
       console.error('Error cancelling recording:', error);
@@ -516,7 +515,7 @@ const UltimateMessagingHub = () => {
     if (!audioBlob || !selectedConversation) return;
 
     const tempId = Date.now().toString();
-    
+
     // Create optimistic voice message
     const optimisticMessage = {
       id: tempId,
@@ -547,16 +546,16 @@ const UltimateMessagingHub = () => {
       if (uploadResponse.data.success) {
         // Send voice message
         const messageResponse = await messageAPI.sendToConversation(
-          selectedConversation.id, 
-          'Voice message', 
+          selectedConversation.id,
+          'Voice message',
           uploadResponse.data.file
         );
 
         if (messageResponse.data.success) {
           // Replace optimistic message with real one
-          setMessages(prev => prev.map(msg => 
-            msg.id === tempId ? { 
-              ...messageResponse.data.data, 
+          setMessages(prev => prev.map(msg =>
+            msg.id === tempId ? {
+              ...messageResponse.data.data,
               isOptimistic: false,
               isUploading: false
             } : msg
@@ -586,18 +585,18 @@ const UltimateMessagingHub = () => {
       console.log('❌ No conversationId provided to loadMessages');
       return;
     }
-    
+
     try {
       console.log('📥 Loading messages for conversation:', conversationId);
       const response = await messageAPI.getConversationMessages(conversationId);
       console.log('📥 Raw API response:', response.data);
-      
+
       if (response.data && response.data.success) {
         const loadedMessages = response.data.messages || [];
         console.log('📥 Loaded messages count:', loadedMessages.length);
         console.log('📥 First few messages:', loadedMessages.slice(0, 3));
         setMessages(loadedMessages);
-        
+
         // Scroll to bottom after loading
         setTimeout(() => scrollToBottom(), 100);
       } else {
@@ -613,22 +612,22 @@ const UltimateMessagingHub = () => {
 
   const handleConversationSelect = (conversation) => {
     console.log('🔄 Selecting conversation:', conversation);
-    
+
     // Leave previous conversation (only for real conversations)
     if (selectedConversation?.id && !selectedConversation.isAI) {
       leaveConversation(selectedConversation.id);
     }
-    
+
     setSelectedConversation(conversation);
-    
+
     // Clear both message states when switching conversations
     setMessages([]);
     setAiMessages([]);
-    
+
     if (conversation.isAI) {
       // For AI conversations, don't load from backend or join socket rooms
       console.log('🤖 Selected AI conversation');
-      
+
       // Add welcome message for AI
       const welcomeMessage = {
         id: 'ai-welcome-' + Date.now(),
@@ -643,7 +642,7 @@ const UltimateMessagingHub = () => {
         },
         messageType: 'text'
       };
-      
+
       setTimeout(() => {
         setAiMessages([welcomeMessage]);
         scrollToBottom();
@@ -654,7 +653,7 @@ const UltimateMessagingHub = () => {
       loadMessages(conversation.id);
       joinConversation(conversation.id);
     }
-    
+
     // Close search modal
     setShowSearch(false);
   };
@@ -662,7 +661,7 @@ const UltimateMessagingHub = () => {
   const startConversationWithUser = async (targetUser) => {
     try {
       // Check if conversation already exists
-      const existingConversation = conversations.find(conv => 
+      const existingConversation = conversations.find(conv =>
         conv.participants?.some(p => p.user.id === targetUser.id)
       );
 
@@ -673,21 +672,21 @@ const UltimateMessagingHub = () => {
       } else {
         // Send initial message to create conversation
         const response = await messageAPI.sendMessage(targetUser.id, `Hi ${targetUser.username}! 👋`);
-        
+
         if (response.data.success) {
           // Reload conversations to get the new one
           await loadInitialData();
-          
+
           // Find and select the new conversation
           setTimeout(() => {
-            const newConversation = conversations.find(conv => 
+            const newConversation = conversations.find(conv =>
               conv.participants?.some(p => p.user.id === targetUser.id)
             );
             if (newConversation) {
               handleConversationSelect(newConversation);
             }
           }, 500);
-          
+
           setActiveTab('conversations');
         }
       }
@@ -702,7 +701,7 @@ const UltimateMessagingHub = () => {
 
     for (const file of files) {
       const tempId = Date.now().toString() + Math.random();
-      
+
       // Create optimistic file message
       const optimisticMessage = {
         id: tempId,
@@ -736,16 +735,16 @@ const UltimateMessagingHub = () => {
         if (uploadResponse.data.success) {
           // Send file message
           const messageResponse = await messageAPI.sendToConversation(
-            selectedConversation.id, 
-            file.name, 
+            selectedConversation.id,
+            file.name,
             uploadResponse.data.file
           );
 
           if (messageResponse.data.success) {
             // Replace optimistic message with real one
-            setMessages(prev => prev.map(msg => 
-              msg.id === tempId ? { 
-                ...messageResponse.data.data, 
+            setMessages(prev => prev.map(msg =>
+              msg.id === tempId ? {
+                ...messageResponse.data.data,
                 isOptimistic: false,
                 isUploading: false
               } : msg
@@ -853,7 +852,7 @@ const UltimateMessagingHub = () => {
 
     const messageContent = newMessage.trim();
     const tempId = Date.now().toString();
-    
+
     try {
       setIsUploading(true);
       let fileData = null;
@@ -862,11 +861,11 @@ const UltimateMessagingHub = () => {
       if (selectedFile) {
         const formData = new FormData();
         formData.append('file', selectedFile);
-        
+
         console.log('📤 Uploading file:', selectedFile.name);
         const uploadResponse = await messageAPI.uploadFile(formData);
         console.log('📥 Upload response:', uploadResponse.data);
-        
+
         if (uploadResponse.data.success) {
           fileData = uploadResponse.data.file;
           console.log('✅ File data:', fileData);
@@ -903,7 +902,7 @@ const UltimateMessagingHub = () => {
         setMessages(prev => [...prev, optimisticMessage]);
         console.log('💬 Added optimistic user message');
       }
-      
+
       setNewMessage('');
       setSelectedFile(null);
       setFilePreview(null);
@@ -914,10 +913,10 @@ const UltimateMessagingHub = () => {
         console.log('🤖 Processing AI conversation');
         console.log('🤖 Selected conversation:', selectedConversation);
         console.log('🤖 Message content:', messageContent);
-        
+
         try {
           console.log('🤖 Sending AI message:', messageContent);
-          
+
           const systemPrompt = `You are an AI assistant integrated into Sociogram's messaging system. 
 
 Your role:
@@ -976,9 +975,9 @@ Keep responses conversational and helpful!`;
         } catch (error) {
           console.error('🚨 AI Chat error:', error);
           console.error('🚨 Error details:', error.response?.data || error.message);
-          
+
           let errorContent = 'Sorry, I encountered an error. Please try again.';
-          
+
           // Provide more specific error messages
           if (error.response?.status === 401) {
             errorContent = 'Authentication error. Please try logging in again.';
@@ -987,7 +986,7 @@ Keep responses conversational and helpful!`;
           } else if (error.code === 'NETWORK_ERROR') {
             errorContent = 'Network error. Please check your connection and try again.';
           }
-          
+
           const errorMessage = {
             id: Date.now() + 1,
             content: errorContent + ' 😅',
@@ -1012,26 +1011,26 @@ Keep responses conversational and helpful!`;
         messageContent,
         hasFile: !!fileData
       });
-      
+
       const response = await messageAPI.sendToConversation(
-        selectedConversation.id, 
-        messageContent || undefined, 
+        selectedConversation.id,
+        messageContent || undefined,
         fileData
       );
-      
+
       console.log('💬 Backend response:', response.data);
-      
+
       // Emit via socket for real-time delivery
       if (response.data.success) {
         console.log('💬 Emitting message via socket');
-        const receiverId = selectedConversation.isGroup 
-          ? null 
-          : selectedConversation.participants?.find(p => 
-              (p.user?.id !== user.id) || (p.userId !== user.id)
-            )?.user?.id || selectedConversation.participants?.find(p => 
-              (p.user?.id !== user.id) || (p.userId !== user.id)
-            )?.userId;
-            
+        const receiverId = selectedConversation.isGroup
+          ? null
+          : selectedConversation.participants?.find(p =>
+            (p.user?.id !== user.id) || (p.userId !== user.id)
+          )?.user?.id || selectedConversation.participants?.find(p =>
+            (p.user?.id !== user.id) || (p.userId !== user.id)
+          )?.userId;
+
         console.log('💬 Socket message details:', {
           conversationId: selectedConversation.id,
           senderId: user.id,
@@ -1039,7 +1038,7 @@ Keep responses conversational and helpful!`;
           receiverId,
           participants: selectedConversation.participants
         });
-        
+
         sendMessage({
           ...response.data.data,
           conversationId: selectedConversation.id,
@@ -1049,19 +1048,19 @@ Keep responses conversational and helpful!`;
         });
         console.log('💬 Socket message emitted successfully');
       }
-      
+
       if (response.data.success) {
         // Replace optimistic message with real one
         console.log('💬 Replacing optimistic message with real one:', {
           tempId,
           realMessage: response.data.data
         });
-        
+
         setMessages(prev => {
           console.log('💬 Before replacement - messages count:', prev.length);
           console.log('💬 Looking for tempId:', tempId);
           console.log('💬 Real message data:', response.data.data);
-          
+
           const updated = prev.map(msg => {
             if (msg.id === tempId) {
               console.log('💬 Found and replacing optimistic message');
@@ -1069,7 +1068,7 @@ Keep responses conversational and helpful!`;
             }
             return msg;
           });
-          
+
           console.log('💬 After replacement - messages count:', updated.length);
           return updated;
         });
@@ -1123,13 +1122,13 @@ Keep responses conversational and helpful!`;
         // Remove from conversations list
         setConversations(prev => prev.filter(conv => conv._id !== groupId));
         setGroups(prev => prev.filter(group => group._id !== groupId));
-        
+
         // Clear selected conversation if it was the deleted group
         if (selectedConversation?._id === groupId) {
           setSelectedConversation(null);
           setMessages([]);
         }
-        
+
         alert('Group deleted successfully');
       }
     } catch (error) {
@@ -1150,13 +1149,13 @@ Keep responses conversational and helpful!`;
         // Remove from conversations list
         setConversations(prev => prev.filter(conv => conv._id !== groupId));
         setGroups(prev => prev.filter(group => group._id !== groupId));
-        
+
         // Clear selected conversation if it was the left group
         if (selectedConversation?._id === groupId) {
           setSelectedConversation(null);
           setMessages([]);
         }
-        
+
         alert('Left group successfully');
       }
     } catch (error) {
@@ -1200,7 +1199,7 @@ Keep responses conversational and helpful!`;
               >
                 <MagnifyingGlassIcon className="w-5 h-5" />
               </button>
-              
+
               {/* Create Group Button */}
               <button
                 onClick={() => {
@@ -1215,27 +1214,25 @@ Keep responses conversational and helpful!`;
               </button>
             </div>
           </div>
-          
+
           {/* Tab Navigation - Improved Layout */}
           <div className="grid grid-cols-2 gap-2 mb-2">
             <button
               onClick={() => setActiveTab('conversations')}
-              className={`flex items-center justify-center space-x-2 px-3 py-2.5 rounded-lg transition-all duration-200 text-sm font-medium ${
-                activeTab === 'conversations'
-                  ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-md'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900'
-              }`}
+              className={`flex items-center justify-center space-x-2 px-3 py-2.5 rounded-lg transition-all duration-200 text-sm font-medium ${activeTab === 'conversations'
+                ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-md'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900'
+                }`}
             >
               <ChatBubbleLeftIcon className="w-4 h-4" />
               <span>Chats</span>
             </button>
             <button
               onClick={() => setActiveTab('ai-chat')}
-              className={`flex items-center justify-center space-x-2 px-3 py-2.5 rounded-lg transition-all duration-200 text-sm font-medium ${
-                activeTab === 'ai-chat'
-                  ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-md'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900'
-              }`}
+              className={`flex items-center justify-center space-x-2 px-3 py-2.5 rounded-lg transition-all duration-200 text-sm font-medium ${activeTab === 'ai-chat'
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-md'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900'
+                }`}
             >
               <SparklesIcon className="w-4 h-4" />
               <span>AI Chat</span>
@@ -1244,22 +1241,20 @@ Keep responses conversational and helpful!`;
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => setActiveTab('groups')}
-              className={`flex items-center justify-center space-x-2 px-3 py-2.5 rounded-lg transition-all duration-200 text-sm font-medium ${
-                activeTab === 'groups'
-                  ? 'bg-gradient-to-r from-green-500 to-blue-500 text-white shadow-md'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900'
-              }`}
+              className={`flex items-center justify-center space-x-2 px-3 py-2.5 rounded-lg transition-all duration-200 text-sm font-medium ${activeTab === 'groups'
+                ? 'bg-gradient-to-r from-green-500 to-blue-500 text-white shadow-md'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900'
+                }`}
             >
               <UserGroupIcon className="w-4 h-4" />
               <span>Groups</span>
             </button>
             <button
               onClick={() => setActiveTab('following')}
-              className={`flex items-center justify-center space-x-2 px-3 py-2.5 rounded-lg transition-all duration-200 text-sm font-medium ${
-                activeTab === 'following'
-                  ? 'bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow-md'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900'
-              }`}
+              className={`flex items-center justify-center space-x-2 px-3 py-2.5 rounded-lg transition-all duration-200 text-sm font-medium ${activeTab === 'following'
+                ? 'bg-gradient-to-r from-pink-500 to-purple-500 text-white shadow-md'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-900'
+                }`}
             >
               <UserPlusIcon className="w-4 h-4" />
               <span>Following</span>
@@ -1278,9 +1273,8 @@ Keep responses conversational and helpful!`;
                   onClick={() => {
                     handleConversationSelect(conversation);
                   }}
-                  className={`p-4 cursor-pointer hover:bg-gray-50 border-b border-gray-100 transition-colors ${
-                    selectedConversation?.id === conversation.id ? 'bg-purple-50' : ''
-                  }`}
+                  className={`p-4 cursor-pointer hover:bg-gray-50 border-b border-gray-100 transition-colors ${selectedConversation?.id === conversation.id ? 'bg-purple-50' : ''
+                    }`}
                 >
                   <div className="flex items-center space-x-3">
                     <div className="relative">
@@ -1289,8 +1283,8 @@ Keep responses conversational and helpful!`;
                           {otherUser?.username?.charAt(0).toUpperCase()}
                         </span>
                       </div>
-                      <OnlineStatus 
-                        userId={otherUser?.id} 
+                      <OnlineStatus
+                        userId={otherUser?.id}
                         isOnline={onlineUsers.has(otherUser?.id)}
                         size="sm"
                       />
@@ -1333,11 +1327,11 @@ Keep responses conversational and helpful!`;
                         }
                       };
                       setSelectedConversation(aiConversation);
-                      
+
                       // Clear messages and add welcome message
                       setMessages([]);
                       setAiMessages([]);
-                      
+
                       // Add welcome message
                       const welcomeMessage = {
                         id: 'ai-welcome-' + Date.now(),
@@ -1360,7 +1354,7 @@ What would you like to know? 😊`,
                         },
                         messageType: 'text'
                       };
-                      
+
                       setTimeout(() => {
                         setAiMessages([welcomeMessage]);
                         scrollToBottom();
@@ -1372,7 +1366,7 @@ What would you like to know? 😊`,
                   </button>
                 </div>
               </div>
-              
+
               {/* Quick Actions Grid */}
               <div className="space-y-3">
                 <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
@@ -1388,7 +1382,7 @@ What would you like to know? 😊`,
                         user: { id: 'ai', username: 'AI Assistant' }
                       };
                       setSelectedConversation(aiConversation);
-                      
+
                       // Add welcome message and set the input
                       const welcomeMessage = {
                         id: 'ai-welcome-email',
@@ -1419,7 +1413,7 @@ Just let me know the details and I'll help you craft the perfect message! ✍️
                       <p className="text-xs text-gray-500">Professional email assistance</p>
                     </div>
                   </button>
-                  
+
                   <button
                     onClick={() => {
                       setSelectedConversation({
@@ -1437,7 +1431,7 @@ Just let me know the details and I'll help you craft the perfect message! ✍️
                       <p className="text-xs text-gray-500">Break the ice with friends</p>
                     </div>
                   </button>
-                  
+
                   <button
                     onClick={() => {
                       setSelectedConversation({
@@ -1455,7 +1449,7 @@ Just let me know the details and I'll help you craft the perfect message! ✍️
                       <p className="text-xs text-gray-500">Boost your creativity</p>
                     </div>
                   </button>
-                  
+
                   <button
                     onClick={() => {
                       setSelectedConversation({
@@ -1481,9 +1475,8 @@ Just let me know the details and I'll help you craft the perfect message! ✍️
               <div
                 key={group.id}
                 onClick={() => handleConversationSelect(group)}
-                className={`p-4 cursor-pointer hover:bg-gray-50 border-b border-gray-100 transition-colors ${
-                  selectedConversation?.id === group.id ? 'bg-purple-50' : ''
-                }`}
+                className={`p-4 cursor-pointer hover:bg-gray-50 border-b border-gray-100 transition-colors ${selectedConversation?.id === group.id ? 'bg-purple-50' : ''
+                  }`}
               >
                 <div className="flex items-center space-x-3">
                   <div className="relative">
@@ -1521,7 +1514,7 @@ Just let me know the details and I'll help you craft the perfect message! ✍️
                       <p className="text-xs text-gray-500">@{followedUser.username}</p>
                     </div>
                   </div>
-                  <button 
+                  <button
                     onClick={() => startConversationWithUser(followedUser)}
                     className="bg-gradient-to-r from-purple-500 to-blue-500 text-white px-3 py-1.5 rounded-lg font-medium hover:from-purple-600 hover:to-blue-600 transition-all duration-200 text-sm"
                   >
@@ -1588,8 +1581,8 @@ Just let me know the details and I'll help you craft the perfect message! ✍️
                         <div>
                           <p className="font-semibold text-gray-900">{otherUser?.username}</p>
                           <div className="text-xs text-gray-500 flex items-center space-x-1">
-                            <OnlineStatus 
-                              userId={otherUser?.id} 
+                            <OnlineStatus
+                              userId={otherUser?.id}
                               isOnline={onlineUsers.has(otherUser?.id)}
                               showText={true}
                               size="xs"
@@ -1601,7 +1594,7 @@ Just let me know the details and I'll help you craft the perfect message! ✍️
                   })()
                 )}
               </div>
-              
+
               <div className="flex items-center space-x-2">
                 {/* Group Management Buttons */}
                 {selectedConversation.isGroup && (
@@ -1615,7 +1608,7 @@ Just let me know the details and I'll help you craft the perfect message! ✍️
                     >
                       <Cog6ToothIcon className="w-5 h-5" />
                     </button>
-                    
+
                     {/* Leave/Delete Group */}
                     {selectedConversation.groupOwner?.id === user.id ? (
                       <button
@@ -1651,7 +1644,7 @@ Just let me know the details and I'll help you craft the perfect message! ✍️
                 >
                   <SparklesIcon className="w-5 h-5" />
                 </button>
-                
+
                 <VideoCall
                   socket={socket}
                   user={user}
@@ -1669,7 +1662,7 @@ Just let me know the details and I'll help you craft the perfect message! ✍️
               {(() => {
                 // Use appropriate message state based on conversation type
                 const currentMessages = selectedConversation?.isAI ? aiMessages : messages;
-                
+
                 return currentMessages.length === 0 ? (
                   <div className="flex items-center justify-center h-full text-gray-500">
                     <div className="text-center">
@@ -1680,230 +1673,228 @@ Just let me know the details and I'll help you craft the perfect message! ✍️
                   </div>
                 ) : (
                   currentMessages.map((message) => {
-                  const isOwnMessage = String(message.senderId) === String(user.id);
-                  const isAIMessage = message.senderId === 'ai';
-                  console.log('Message alignment debug:', { 
-                    messageId: message.id, 
-                    messageSenderId: message.senderId, 
-                    userId: user.id, 
-                    isOwnMessage,
-                    senderUsername: message.sender?.username 
-                  });
-                  
-                  return (
-                <div key={message.id} className={`group flex ${isOwnMessage ? 'justify-end' : 'justify-start'} mb-4`}>
-                  <div className="relative max-w-xs lg:max-w-md">
-                    {/* Sender name for received messages */}
-                    {!isOwnMessage && (
-                      <div className="text-xs text-gray-500 mb-1 px-1">
-                        {message.sender?.username || 'Unknown'}
-                      </div>
-                    )}
-                    {/* Reply Preview */}
-                    {message.replyTo && (
-                      <div className="mb-2 text-xs text-gray-500 border-l-2 border-gray-300 pl-2">
-                        Replying to: {message.replyTo.content?.substring(0, 50)}...
-                      </div>
-                    )}
-                    
-                    {editingMessage?.id === message.id ? (
-                      <MessageEdit
-                        message={message}
-                        onSave={(id, content) => {
-                          // Handle message edit
-                          setEditingMessage(null);
-                        }}
-                        onCancel={() => setEditingMessage(null)}
-                      />
-                    ) : (
-                      <div className={`px-4 py-2 rounded-2xl ${
-                        isOwnMessage
-                          ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white'
-                          : isAIMessage
-                          ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white'
-                          : 'bg-white text-gray-900 border border-gray-200'
-                      }`}>
-                        {/* Voice Message */}
-                        {message.messageType === 'audio' && (
-                          <VoiceMessageDisplay 
-                            message={message} 
-                            isOwn={isOwnMessage} 
-                          />
-                        )}
-                        
-                        {/* File Display */}
-                        {(message.fileUrl || message.file) && (
-                          <div className="mt-2 relative">
-                            {(message.fileType?.startsWith('image/') || message.file?.type?.startsWith('image/') || message.fileName?.match(/\.(jpg|jpeg|png|gif|webp)$/i)) ? (
-                              <ImageWithFallback 
-                                src={message.fileUrl || message.file?.url || message.file}
-                                alt={message.fileName || message.file?.name}
-                                fileName={message.fileName || message.file?.name}
-                                onClick={() => setImageModal({
-                                  show: true,
-                                  src: message.fileUrl || message.file?.url || message.file,
-                                  alt: message.fileName || message.file?.name || 'Image'
-                                })}
-                              />
-                            ) : (message.fileType?.startsWith('video/') || message.file?.type?.startsWith('video/') || message.fileName?.match(/\.(mp4|webm|ogg|mov)$/i)) ? (
-                              <video 
-                                src={message.fileUrl || message.file?.url || message.file} 
-                                controls 
-                                className="max-w-xs rounded-lg"
-                              />
-                            ) : (
-                              <div className="flex items-center space-x-2 p-3 bg-gray-100 rounded-lg max-w-xs">
-                                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium text-gray-900 truncate">
-                                    {message.fileName || message.file?.name || 'File'}
-                                  </p>
-                                  <p className="text-xs text-gray-500">
-                                    {message.fileSize ? `${(message.fileSize / 1024 / 1024).toFixed(2)} MB` : message.file?.size ? `${(message.file.size / 1024 / 1024).toFixed(2)} MB` : ''}
-                                  </p>
-                                </div>
-                                <button
-                                  onClick={() => window.open(message.fileUrl || message.file?.url || message.file, '_blank')}
-                                  className="text-blue-600 hover:text-blue-800"
-                                >
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                  </svg>
-                                </button>
-                              </div>
-                            )}
-                            {message.isUploading && (
-                              <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg">
-                                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        
-                        {/* Text Content */}
-                        {message.content && message.messageType !== 'audio' && !message.fileUrl && !message.file && (
-                          <p className="text-sm leading-relaxed break-words">{message.content}</p>
-                        )}
-                        
-                        {/* Message Footer */}
-                        <div className="flex items-center justify-between mt-2">
-                          <div className={`text-xs font-medium ${
-                            message.senderId === user.id 
-                              ? 'text-white text-opacity-80' 
+                    const isOwnMessage = String(message.senderId) === String(user.id);
+                    const isAIMessage = message.senderId === 'ai';
+                    console.log('Message alignment debug:', {
+                      messageId: message.id,
+                      messageSenderId: message.senderId,
+                      userId: user.id,
+                      isOwnMessage,
+                      senderUsername: message.sender?.username
+                    });
+
+                    return (
+                      <div key={message.id} className={`group flex ${isOwnMessage ? 'justify-end' : 'justify-start'} mb-4`}>
+                        <div className="relative max-w-xs lg:max-w-md">
+                          {/* Sender name for received messages */}
+                          {!isOwnMessage && (
+                            <div className="text-xs text-gray-500 mb-1 px-1">
+                              {message.sender?.username || 'Unknown'}
+                            </div>
+                          )}
+                          {/* Reply Preview */}
+                          {message.replyTo && (
+                            <div className="mb-2 text-xs text-gray-500 border-l-2 border-gray-300 pl-2">
+                              Replying to: {message.replyTo.content?.substring(0, 50)}...
+                            </div>
+                          )}
+
+                          {editingMessage?.id === message.id ? (
+                            <MessageEdit
+                              message={message}
+                              onSave={(id, content) => {
+                                // Handle message edit
+                                setEditingMessage(null);
+                              }}
+                              onCancel={() => setEditingMessage(null)}
+                            />
+                          ) : (
+                            <div className={`px-4 py-2 rounded-2xl ${isOwnMessage
+                              ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white'
                               : isAIMessage
-                              ? 'text-white text-opacity-80'
-                              : 'text-gray-600'
-                          }`}>
-                            {new Date(message.createdAt).toLocaleTimeString([], { 
-                              hour: '2-digit', 
-                              minute: '2-digit' 
-                            })}
-                          </div>
-                          <ReadReceipts
+                                ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white'
+                                : 'bg-white text-gray-900 border border-gray-200'
+                              }`}>
+                              {/* Voice Message */}
+                              {message.messageType === 'audio' && (
+                                <VoiceMessageDisplay
+                                  message={message}
+                                  isOwn={isOwnMessage}
+                                />
+                              )}
+
+                              {/* File Display */}
+                              {(message.fileUrl || message.file) && (
+                                <div className="mt-2 relative">
+                                  {(message.fileType?.startsWith('image/') || message.file?.type?.startsWith('image/') || message.fileName?.match(/\.(jpg|jpeg|png|gif|webp)$/i)) ? (
+                                    <ImageWithFallback
+                                      src={message.fileUrl || message.file?.url || message.file}
+                                      alt={message.fileName || message.file?.name}
+                                      fileName={message.fileName || message.file?.name}
+                                      onClick={() => setImageModal({
+                                        show: true,
+                                        src: message.fileUrl || message.file?.url || message.file,
+                                        alt: message.fileName || message.file?.name || 'Image'
+                                      })}
+                                    />
+                                  ) : (message.fileType?.startsWith('video/') || message.file?.type?.startsWith('video/') || message.fileName?.match(/\.(mp4|webm|ogg|mov)$/i)) ? (
+                                    <video
+                                      src={message.fileUrl || message.file?.url || message.file}
+                                      controls
+                                      className="max-w-xs rounded-lg"
+                                    />
+                                  ) : (
+                                    <div className="flex items-center space-x-2 p-3 bg-gray-100 rounded-lg max-w-xs">
+                                      <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                      </svg>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-gray-900 truncate">
+                                          {message.fileName || message.file?.name || 'File'}
+                                        </p>
+                                        <p className="text-xs text-gray-500">
+                                          {message.fileSize ? `${(message.fileSize / 1024 / 1024).toFixed(2)} MB` : message.file?.size ? `${(message.file.size / 1024 / 1024).toFixed(2)} MB` : ''}
+                                        </p>
+                                      </div>
+                                      <button
+                                        onClick={() => window.open(message.fileUrl || message.file?.url || message.file, '_blank')}
+                                        className="text-blue-600 hover:text-blue-800"
+                                      >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  )}
+                                  {message.isUploading && (
+                                    <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg">
+                                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Text Content */}
+                              {message.content && message.messageType !== 'audio' && !message.fileUrl && !message.file && (
+                                <p className="text-sm leading-relaxed break-words">{message.content}</p>
+                              )}
+
+                              {/* Message Footer */}
+                              <div className="flex items-center justify-between mt-2">
+                                <div className={`text-xs font-medium ${message.senderId === user.id
+                                  ? 'text-white text-opacity-80'
+                                  : isAIMessage
+                                    ? 'text-white text-opacity-80'
+                                    : 'text-gray-600'
+                                  }`}>
+                                  {new Date(message.createdAt).toLocaleTimeString([], {
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </div>
+                                <ReadReceipts
+                                  messageId={message.id}
+                                  status={message.status}
+                                  timestamp={null}
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Message Reactions */}
+                          <MessageReactions
                             messageId={message.id}
-                            status={message.status}
-                            timestamp={null}
+                            reactions={messageReactions[message.id] || {}}
+                            onAddReaction={async (messageId, emoji) => {
+                              try {
+                                console.log('➕ Adding reaction:', { messageId, emoji, userId: user.id });
+
+                                // Optimistic update
+                                setMessageReactions(prev => ({
+                                  ...prev,
+                                  [messageId]: {
+                                    ...prev[messageId],
+                                    [emoji]: [...(prev[messageId]?.[emoji] || []), user.id]
+                                  }
+                                }));
+
+                                // Emit via socket
+                                if (socket) {
+                                  console.log('📡 Emitting reaction via socket');
+                                  socket.emit('messageReaction', {
+                                    messageId,
+                                    emoji,
+                                    action: 'add',
+                                    conversationId: selectedConversation.id
+                                  });
+                                }
+                              } catch (error) {
+                                console.error('Error adding reaction:', error);
+                              }
+                            }}
+                            onRemoveReaction={async (messageId, emoji) => {
+                              try {
+                                console.log('➖ Removing reaction:', { messageId, emoji, userId: user.id });
+
+                                // Optimistic update
+                                setMessageReactions(prev => ({
+                                  ...prev,
+                                  [messageId]: {
+                                    ...prev[messageId],
+                                    [emoji]: (prev[messageId]?.[emoji] || []).filter(id => id !== user.id)
+                                  }
+                                }));
+
+                                // Emit via socket
+                                if (socket) {
+                                  console.log('📡 Emitting remove reaction via socket');
+                                  socket.emit('messageReaction', {
+                                    messageId,
+                                    emoji,
+                                    action: 'remove',
+                                    conversationId: selectedConversation.id
+                                  });
+                                }
+                              } catch (error) {
+                                console.error('Error removing reaction:', error);
+                              }
+                            }}
+                            currentUserId={user.id}
+                          />
+
+                          {/* Message Actions */}
+                          <MessageActions
+                            message={message}
+                            currentUserId={user.id}
+                            conversations={conversations}
+                            onReply={handleMessageAction.reply}
+                            onForward={handleMessageAction.forward}
+                            onEdit={handleMessageAction.edit}
+                            onDelete={handleMessageAction.delete}
+                            onStar={handleMessageAction.star}
+                            onReport={handleMessageAction.report}
+                            isOwn={isOwnMessage}
                           />
                         </div>
                       </div>
-                    )}
-                    
-                    {/* Message Reactions */}
-                    <MessageReactions
-                      messageId={message.id}
-                      reactions={messageReactions[message.id] || {}}
-                      onAddReaction={async (messageId, emoji) => {
-                        try {
-                          console.log('➕ Adding reaction:', { messageId, emoji, userId: user.id });
-                          
-                          // Optimistic update
-                          setMessageReactions(prev => ({
-                            ...prev,
-                            [messageId]: {
-                              ...prev[messageId],
-                              [emoji]: [...(prev[messageId]?.[emoji] || []), user.id]
-                            }
-                          }));
-
-                          // Emit via socket
-                          if (socket) {
-                            console.log('📡 Emitting reaction via socket');
-                            socket.emit('messageReaction', {
-                              messageId,
-                              emoji,
-                              action: 'add',
-                              conversationId: selectedConversation.id
-                            });
-                          }
-                        } catch (error) {
-                          console.error('Error adding reaction:', error);
-                        }
-                      }}
-                      onRemoveReaction={async (messageId, emoji) => {
-                        try {
-                          console.log('➖ Removing reaction:', { messageId, emoji, userId: user.id });
-                          
-                          // Optimistic update
-                          setMessageReactions(prev => ({
-                            ...prev,
-                            [messageId]: {
-                              ...prev[messageId],
-                              [emoji]: (prev[messageId]?.[emoji] || []).filter(id => id !== user.id)
-                            }
-                          }));
-
-                          // Emit via socket
-                          if (socket) {
-                            console.log('📡 Emitting remove reaction via socket');
-                            socket.emit('messageReaction', {
-                              messageId,
-                              emoji,
-                              action: 'remove',
-                              conversationId: selectedConversation.id
-                            });
-                          }
-                        } catch (error) {
-                          console.error('Error removing reaction:', error);
-                        }
-                      }}
-                      currentUserId={user.id}
-                    />
-                    
-                    {/* Message Actions */}
-                    <MessageActions
-                      message={message}
-                      currentUserId={user.id}
-                      conversations={conversations}
-                      onReply={handleMessageAction.reply}
-                      onForward={handleMessageAction.forward}
-                      onEdit={handleMessageAction.edit}
-                      onDelete={handleMessageAction.delete}
-                      onStar={handleMessageAction.star}
-                      onReport={handleMessageAction.report}
-                      isOwn={isOwnMessage}
-                    />
-                  </div>
-                </div>
-                  );
-                })
-              );
+                    );
+                  })
+                );
               })()}
-              
+
               {/* Typing Indicator */}
-              <TypingIndicator 
-                users={typingUsers.map(id => ({ username: `User ${id}` }))} 
-                isVisible={typingUsers.length > 0} 
+              <TypingIndicator
+                users={typingUsers.map(id => ({ username: `User ${id}` }))}
+                isVisible={typingUsers.length > 0}
               />
-              
+
               <div ref={messagesEndRef} />
             </div>
 
             {/* Reply Preview */}
-            <ReplyPreview 
-              replyingTo={replyingTo} 
-              onCancel={() => setReplyingTo(null)} 
+            <ReplyPreview
+              replyingTo={replyingTo}
+              onCancel={() => setReplyingTo(null)}
             />
 
             {/* Voice Message Preview */}
@@ -1941,14 +1932,14 @@ Just let me know the details and I'll help you craft the perfect message! ✍️
             {selectedFile && (
               <div className="bg-gray-50 border-t border-gray-200 p-4">
                 <div className="bg-white rounded-lg p-3 relative border border-gray-200">
-                  <button 
+                  <button
                     onClick={removeSelectedFile}
                     className="absolute top-2 right-2 bg-gray-200 rounded-full p-1 hover:bg-gray-300 transition-colors"
                     title="Remove file"
                   >
                     <XMarkIcon className="w-4 h-4 text-gray-600" />
                   </button>
-                  
+
                   {filePreview ? (
                     <div className="flex justify-center mb-2">
                       <img src={filePreview} alt="Preview" className="max-h-32 rounded border" />
@@ -1962,11 +1953,11 @@ Just let me know the details and I'll help you craft the perfect message! ✍️
                       </div>
                     </div>
                   )}
-                  
+
                   {isUploading && (
                     <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-purple-500 h-2 rounded-full transition-all duration-300" 
+                      <div
+                        className="bg-purple-500 h-2 rounded-full transition-all duration-300"
                         style={{ width: `${uploadProgress}%` }}
                       />
                     </div>
@@ -1991,7 +1982,7 @@ Just let me know the details and I'll help you craft the perfect message! ✍️
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                       </svg>
                     </button>
-                    
+
                     {showFileOptions && (
                       <div className="absolute bottom-full left-0 mb-2 bg-white shadow-lg rounded-lg border p-2 w-48 z-10">
                         <input
@@ -2001,7 +1992,7 @@ Just let me know the details and I'll help you craft the perfect message! ✍️
                           id="fileInput"
                           accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt,.xlsx,.ppt,.pptx"
                         />
-                        <label 
+                        <label
                           htmlFor="fileInput"
                           className="flex items-center p-2 hover:bg-gray-100 rounded cursor-pointer"
                         >
@@ -2013,7 +2004,7 @@ Just let me know the details and I'll help you craft the perfect message! ✍️
                       </div>
                     )}
                   </div>
-                  
+
                   <div className="flex-1">
                     <input
                       type="text"
@@ -2033,15 +2024,14 @@ Just let me know the details and I'll help you craft the perfect message! ✍️
                       disabled={isUploading}
                     />
                   </div>
-                  
+
                   <button
                     type="button"
                     onClick={isRecording ? stopRecording : startRecording}
-                    className={`p-2 rounded-full transition-colors ${
-                      isRecording 
-                        ? 'bg-red-500 text-white hover:bg-red-600' 
-                        : 'text-gray-600 hover:bg-gray-100'
-                    }`}
+                    className={`p-2 rounded-full transition-colors ${isRecording
+                      ? 'bg-red-500 text-white hover:bg-red-600'
+                      : 'text-gray-600 hover:bg-gray-100'
+                      }`}
                     title={isRecording ? "Stop Recording" : "Voice Message"}
                     disabled={isUploading}
                   >
@@ -2051,8 +2041,8 @@ Just let me know the details and I'll help you craft the perfect message! ✍️
                       <MicrophoneIcon className="w-5 h-5" />
                     )}
                   </button>
-                  
-                  
+
+
                   <button
                     type="submit"
                     disabled={(!newMessage.trim() && !selectedFile) || isUploading}
@@ -2158,14 +2148,14 @@ Just let me know the details and I'll help you craft the perfect message! ✍️
           onClose={() => setShowGroupSettings(false)}
           onGroupUpdate={(updatedGroup) => {
             setSelectedConversation(updatedGroup);
-            setConversations(prev => prev.map(conv => 
+            setConversations(prev => prev.map(conv =>
               conv.id === updatedGroup.id ? updatedGroup : conv
             ));
           }}
           onGroupDelete={handleDeleteGroup}
           onMemberUpdate={(updatedGroup) => {
             setSelectedConversation(updatedGroup);
-            setConversations(prev => prev.map(conv => 
+            setConversations(prev => prev.map(conv =>
               conv.id === updatedGroup.id ? updatedGroup : conv
             ));
           }}
@@ -2185,8 +2175,8 @@ Just let me know the details and I'll help you craft the perfect message! ✍️
 
       {/* Image Modal */}
       {imageModal.show && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50" 
+        <div
+          className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50"
           onClick={() => setImageModal({ show: false, src: '', alt: '' })}
         >
           <div className="relative max-w-5xl max-h-full p-4">

@@ -1,14 +1,15 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { User } from '../models/user.model.js';
+import { Conversation } from '../models/conversation.model.js';
+import { Message } from '../models/message.model.js';
+import { Follow } from '../models/follow.model.js';
 
 export const seedConversationsAndFollows = async () => {
   try {
-    console.log('Starting conversations and follows seeding...');
+    console.log('Starting conversations and follows seeding (Mongoose)...');
 
     // Get all users
-    const users = await prisma.user.findMany();
-    
+    const users = await User.find();
+
     if (users.length < 2) {
       console.log('Not enough users to create conversations');
       return;
@@ -37,21 +38,19 @@ export const seedConversationsAndFollows = async () => {
     for (const [followerUsername, followingUsername] of followPairs) {
       const follower = users.find(u => u.username === followerUsername);
       const following = users.find(u => u.username === followingUsername);
-      
+
       if (follower && following) {
         try {
-          await prisma.follow.create({
-            data: {
-              followerId: follower.id,
-              followingId: following.id
-            }
-          });
-          console.log(`${followerUsername} is now following ${followingUsername}`);
-        } catch (error) {
-          // Ignore duplicate follow errors
-          if (!error.message.includes('Unique constraint')) {
-            console.error('Follow creation error:', error);
+          const exists = await Follow.findOne({ followerId: follower._id, followingId: following._id });
+          if (!exists) {
+            await Follow.create({
+              followerId: follower._id,
+              followingId: following._id
+            });
+            console.log(`${followerUsername} is now following ${followingUsername}`);
           }
+        } catch (error) {
+          console.error('Follow creation error:', error);
         }
       }
     }
@@ -71,20 +70,20 @@ export const seedConversationsAndFollows = async () => {
     for (const [user1Username, user2Username] of conversationPairs) {
       const user1 = users.find(u => u.username === user1Username);
       const user2 = users.find(u => u.username === user2Username);
-      
+
       if (user1 && user2) {
         // Create conversation
-        const conversation = await prisma.conversation.create({
-          data: {
-            isGroup: false,
-            participants: {
-              create: [
-                { userId: user1.id },
-                { userId: user2.id }
-              ]
-            }
-          }
+        let conversation = await Conversation.findOne({
+          participants: { $all: [user1._id, user2._id] },
+          isGroupChat: false
         });
+
+        if (!conversation) {
+          conversation = await Conversation.create({
+            isGroupChat: false,
+            participants: [user1._id, user2._id]
+          });
+        }
 
         // Add some sample messages
         const sampleMessages = [
@@ -96,14 +95,17 @@ export const seedConversationsAndFollows = async () => {
         ];
 
         for (let i = 0; i < sampleMessages.length; i++) {
-          const senderId = i % 2 === 0 ? user1.id : user2.id;
-          await prisma.message.create({
-            data: {
-              content: sampleMessages[i],
-              senderId,
-              conversationId: conversation.id,
-              createdAt: new Date(Date.now() - (sampleMessages.length - i) * 60000) // Messages 1 minute apart
-            }
+          const senderId = i % 2 === 0 ? user1._id : user2._id;
+          const msg = await Message.create({
+            content: sampleMessages[i],
+            sender: senderId,
+            conversationId: conversation._id,
+            createdAt: new Date(Date.now() - (sampleMessages.length - i) * 60000)
+          });
+
+          await Conversation.findByIdAndUpdate(conversation._id, {
+            $push: { messages: msg._id },
+            lastMessage: msg._id
           });
         }
 
@@ -115,7 +117,5 @@ export const seedConversationsAndFollows = async () => {
   } catch (error) {
     console.error('Error seeding conversations and follows:', error);
     throw error;
-  } finally {
-    await prisma.$disconnect();
   }
 };

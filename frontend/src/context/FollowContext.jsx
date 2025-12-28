@@ -24,10 +24,9 @@ export const FollowProvider = ({ children }) => {
   useEffect(() => {
     if (user && user.token) {
       // Force production URL for deployed version
-      const SOCKET_URL = window.location.hostname === 'sociogram-1.onrender.com' 
-        ? 'https://sociogram-n73b.onrender.com'
-        : import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'https://social-media-pdbl.onrender.com';
-      
+      // Local Socket URL for development
+      const SOCKET_URL = 'http://localhost:8000';
+
       const newSocket = io(SOCKET_URL, {
         auth: { token: user.token },
         withCredentials: true
@@ -64,11 +63,11 @@ export const FollowProvider = ({ children }) => {
   const toggleFollow = useCallback(async (user) => {
     const userId = user.id || user._id;
     const wasFollowing = followingUsers.has(userId);
-    
+
     try {
       // Set processing state
       setProcessingUsers(prev => new Set([...prev, userId]));
-      
+
       // Optimistic UI update
       setFollowingUsers(prev => {
         const newSet = new Set(prev);
@@ -79,7 +78,7 @@ export const FollowProvider = ({ children }) => {
         }
         return newSet;
       });
-      
+
       // Update counts optimistically
       setFollowCounts(prev => ({
         ...prev,
@@ -93,10 +92,10 @@ export const FollowProvider = ({ children }) => {
           following: (prev[user.id]?.following || 0) + (wasFollowing ? -1 : 1)
         }
       }));
-      
+
       // API call
       const response = await authAPI.followUser(userId);
-      
+
       if (response.data.success) {
         // Update with actual counts from server
         setFollowCounts(prev => ({
@@ -111,9 +110,9 @@ export const FollowProvider = ({ children }) => {
             following: (prev[user.id]?.following || 0) + (wasFollowing ? -1 : 1)
           }
         }));
-        
+
         console.log(`✅ ${response.data.action} ${user.username}`);
-        
+
         // Send follow notification if user started following (not unfollowing)
         if (!wasFollowing && socket) {
           socket.emit('followNotification', {
@@ -122,12 +121,12 @@ export const FollowProvider = ({ children }) => {
             followerId: user.id
           });
         }
-        
+
         // If mutual follow, log it
         if (response.data.isMutualFollow) {
           console.log(`🤝 Mutual follow established with ${user.username}! You can now message each other.`);
         }
-        
+
         return {
           success: true,
           action: response.data.action,
@@ -145,7 +144,7 @@ export const FollowProvider = ({ children }) => {
           }
           return newSet;
         });
-        
+
         setFollowCounts(prev => ({
           ...prev,
           [userId]: {
@@ -153,13 +152,13 @@ export const FollowProvider = ({ children }) => {
             followers: (prev[userId]?.followers || 0) + (wasFollowing ? 1 : -1)
           }
         }));
-        
+
         console.error('❌ Follow action failed:', response.data.message);
         return { success: false, message: response.data.message };
       }
     } catch (error) {
       console.error('❌ Error toggling follow:', error);
-      
+
       // Revert optimistic update on error
       setFollowingUsers(prev => {
         const newSet = new Set(prev);
@@ -170,7 +169,7 @@ export const FollowProvider = ({ children }) => {
         }
         return newSet;
       });
-      
+
       setFollowCounts(prev => ({
         ...prev,
         [userId]: {
@@ -178,7 +177,7 @@ export const FollowProvider = ({ children }) => {
           followers: (prev[userId]?.followers || 0) + (wasFollowing ? 1 : -1)
         }
       }));
-      
+
       return { success: false, message: 'Network error occurred' };
     } finally {
       // Remove processing state
@@ -214,12 +213,12 @@ export const FollowProvider = ({ children }) => {
         authAPI.getFollowing(currentUserId),
         authAPI.getProfile(currentUserId)
       ]);
-      
+
       const following = followingResponse.data.following || [];
       const followingIds = new Set(following.map(user => user.id));
-      
+
       setFollowingUsers(followingIds);
-      
+
       // Initialize current user's follow counts
       const currentUserProfile = profileResponse.data.user;
       setFollowCounts(prev => ({
@@ -229,7 +228,7 @@ export const FollowProvider = ({ children }) => {
           following: currentUserProfile.following?.length || 0
         }
       }));
-      
+
       // Initialize counts for followed users
       following.forEach(user => {
         setFollowCounts(prev => ({
@@ -237,7 +236,7 @@ export const FollowProvider = ({ children }) => {
           [user.id]: { followers: 0, following: 0 } // Will be updated when needed
         }));
       });
-      
+
       console.log(`✅ Loaded follow state: following ${following.length} users`);
     } catch (error) {
       console.error('❌ Error loading follow state:', error);

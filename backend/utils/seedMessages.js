@@ -1,9 +1,10 @@
-import { PrismaClient } from '@prisma/client';
+import { User } from '../models/user.model.js';
+import { Conversation } from '../models/conversation.model.js';
+import { Message } from '../models/message.model.js';
+import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 
 dotenv.config();
-
-const prisma = new PrismaClient();
 
 const sampleMessages = [
   "Hey! How are you doing?",
@@ -24,11 +25,14 @@ const sampleMessages = [
 
 async function seedMessages() {
   try {
-    console.log('🌱 Starting messages seeding...');
+    console.log('🌱 Starting messages seeding (Mongoose)...');
 
-    // Get all users
-    const users = await prisma.user.findMany();
-    
+    if (mongoose.connection.readyState === 0) {
+      await mongoose.connect(process.env.DATABASE_URL);
+    }
+
+    const users = await User.find();
+
     if (users.length < 2) {
       console.log('Not enough users to create conversations');
       return;
@@ -37,7 +41,6 @@ async function seedMessages() {
     let conversationsCreated = 0;
     let messagesCreated = 0;
 
-    // Create conversations between random pairs of users
     const conversationPairs = [
       ['john_doe', 'jane_smith'],
       ['john_doe', 'alex_wilson'],
@@ -52,52 +55,43 @@ async function seedMessages() {
     for (const [user1Username, user2Username] of conversationPairs) {
       const user1 = users.find(u => u.username === user1Username);
       const user2 = users.find(u => u.username === user2Username);
-      
+
       if (!user1 || !user2) continue;
 
       try {
-        // Create conversation
-        const conversation = await prisma.conversation.create({
-          data: {
-            isGroup: false,
-            participants: {
-              create: [
-                { userId: user1.id },
-                { userId: user2.id }
-              ]
-            }
-          }
+        let conversation = await Conversation.findOne({
+          participants: { $all: [user1._id, user2._id] },
+          isGroupChat: false
         });
 
-        conversationsCreated++;
-        console.log(`💬 Created conversation between ${user1.username} and ${user2.username}`);
+        if (!conversation) {
+          conversation = await Conversation.create({
+            isGroupChat: false,
+            participants: [user1._id, user2._id]
+          });
+          conversationsCreated++;
+          console.log(`💬 Created conversation between ${user1.username} and ${user2.username}`);
+        }
 
-        // Add 3-7 messages to this conversation
-        const numMessages = Math.floor(Math.random() * 5) + 3; // 3-7 messages
-        const shuffledMessages = sampleMessages.sort(() => 0.5 - Math.random()).slice(0, numMessages);
+        const numMessages = Math.floor(Math.random() * 5) + 3;
+        const shuffledMessages = [...sampleMessages].sort(() => 0.5 - Math.random()).slice(0, numMessages);
 
         for (let i = 0; i < shuffledMessages.length; i++) {
           const sender = i % 2 === 0 ? user1 : user2;
-          const receiver = i % 2 === 0 ? user2 : user1;
-          
-          await prisma.message.create({
-            data: {
-              content: shuffledMessages[i],
-              senderId: sender.id,
-              receiverId: receiver.id,
-              conversationId: conversation.id,
-              messageType: 'text',
-              createdAt: new Date(Date.now() - (shuffledMessages.length - i) * 60000) // Spread messages over time
-            }
+
+          const msg = await Message.create({
+            content: shuffledMessages[i],
+            sender: sender._id,
+            conversationId: conversation._id,
+            createdAt: new Date(Date.now() - (shuffledMessages.length - i) * 60000)
+          });
+
+          await Conversation.findByIdAndUpdate(conversation._id, {
+            $push: { messages: msg._id },
+            lastMessage: msg._id
           });
           messagesCreated++;
         }
-
-        // Update conversation timestamp
-        await prisma.conversation.update({
-          where: { id: conversation.id },
-          data: { updatedAt: new Date() }
-        });
 
       } catch (error) {
         console.error(`Error creating conversation between ${user1Username} and ${user2Username}:`, error);
@@ -105,12 +99,12 @@ async function seedMessages() {
     }
 
     console.log(`✅ Created ${conversationsCreated} conversations with ${messagesCreated} messages`);
-    
+
   } catch (error) {
     console.error('❌ Error seeding messages:', error);
     throw error;
   } finally {
-    await prisma.$disconnect();
+    await mongoose.connection.close();
   }
 }
 

@@ -26,7 +26,7 @@ try {
     if (process.env.NODE_ENV !== 'production') {
         console.log(`[env] root .env loaded: ${!rootDotenvLoaded.error}, backend .env loaded: ${!backendDotenvLoaded.error}, AI key present: ${aiKeyPresent}`);
     }
-} catch {}
+} catch { }
 
 const app = express();
 const server = http.createServer(app);
@@ -39,48 +39,37 @@ const PORT = process.env.PORT || 8000;
 //middlewares
 app.use(express.json());
 app.use(cookieParser());
-    // Build an allowlist and use a dynamic origin function so the server
-    // echoes the allowed origin back in the Access-Control-Allow-Origin header.
-    const ALLOWED_ORIGINS = [
-        // Prefer explicit FRONTEND_URL from environment when available
-        process.env.FRONTEND_URL || 'https://social-media-1-lzs4.onrender.com',
-        // Backend (self) and known frontend deployments
-        'https://social-media-1-lzs4.onrender.com',
-        'https://social-media-pdbl.onrender.com',
-        'https://sociogram-1.onrender.com',
-        'https://sociogram-n73b.onrender.com',
-        // Local development URLs
-        'http://localhost:5001',
-        'http://localhost:5000',
-        'http://127.0.0.1:5000',
-        'http://localhost:5176',
-        'http://localhost:5175',
-        'http://127.0.0.1:5175',
-        'http://localhost:8000',
-        'http://127.0.0.1:8000',
-        'http://localhost:5173',
-        'http://127.0.0.1:5173',
-        // Replit dynamic domain (if used)
-        `https://${process.env.REPLIT_DEV_DOMAIN}`,
-        `http://${process.env.REPLIT_DEV_DOMAIN}`
-    ];
+// Build an allowlist and use a dynamic origin function so the server
+// echoes the allowed origin back in the Access-Control-Allow-Origin header.
+const ALLOWED_ORIGINS = [
+    process.env.FRONTEND_URL,
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:5001',
+    'http://127.0.0.1:5001',
+    'http://localhost:5000',
+    'http://127.0.0.1:5000',
+    'http://localhost:8000',
+    'http://127.0.0.1:8000',
+    'http://localhost:3000'
+].filter(Boolean);
 
-    const corsOptions = {
-        origin: (origin, callback) => {
-            // Allow non-browser requests like Postman (no origin)
-            if (!origin) return callback(null, true);
+const corsOptions = {
+    origin: (origin, callback) => {
+        // Allow non-browser requests like Postman (no origin)
+        if (!origin) return callback(null, true);
 
-            if (ALLOWED_ORIGINS.includes(origin)) {
-                return callback(null, true);
-            }
+        if (ALLOWED_ORIGINS.includes(origin)) {
+            return callback(null, true);
+        }
 
-            // If origin is not allowed, return an explicit error (browser will block)
-            return callback(new Error('Not allowed by CORS'));
-        },
-        credentials: true,
-        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization', 'Cookie']
-    };
+        // If origin is not allowed, return an explicit error (browser will block)
+        return callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Cookie']
+};
 app.use(cors(corsOptions));
 
 // Handle preflight requests
@@ -111,15 +100,15 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 const __dirname = path.resolve();
 
 // API-only mode for backend service
-app.get("/", (req,res)=>{
-    res.json({ 
-        message: "Sociogram API Server", 
+app.get("/", (req, res) => {
+    res.json({
+        message: "Sociogram API Server",
         status: "running",
         environment: process.env.NODE_ENV || "development",
         version: "3.0.0",
         endpoints: {
             users: "/api/v1/user",
-            posts: "/api/v1/post", 
+            posts: "/api/v1/post",
             messages: "/api/v1/message",
             groups: "/api/v1/group",
             notifications: "/api/v1/notifications",
@@ -131,8 +120,8 @@ app.get("/", (req,res)=>{
 });
 
 // Health check endpoint
-app.get("/health", (req,res)=>{
-    res.json({ 
+app.get("/health", (req, res) => {
+    res.json({
         status: "healthy",
         timestamp: new Date().toISOString(),
         uptime: process.uptime()
@@ -141,7 +130,7 @@ app.get("/health", (req,res)=>{
 
 server.listen(PORT, async () => {
     connectDB();
-    
+
     // Initialize Firebase Admin
     try {
         await initializeFirebaseAdmin();
@@ -149,10 +138,10 @@ server.listen(PORT, async () => {
     } catch (error) {
         console.error('❌ Failed to initialize Firebase Admin:', error);
     }
-    
+
     console.log(`Server listening at port ${PORT}`);
     console.log(`Socket.io server ready for connections`);
-    
+
     // Start story cleanup scheduler
     startStoryCleanupScheduler();
 });

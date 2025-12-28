@@ -1,13 +1,13 @@
 import mongoose from "mongoose";
 
 const messageSchema = new mongoose.Schema({
-    senderId: {
-        type: mongoose.Schema.Types.ObjectId, 
+    sender: {
+        type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true
     },
-    receiverId: {
-        type: mongoose.Schema.Types.ObjectId, 
+    receiver: {
+        type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
     },
     conversationId: {
@@ -15,9 +15,9 @@ const messageSchema = new mongoose.Schema({
         ref: 'Conversation',
         required: true
     },
-    message: {
+    content: {
         type: String,
-        required: function() {
+        required: function () {
             return !this.file;
         }
     },
@@ -37,9 +37,8 @@ const messageSchema = new mongoose.Schema({
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User'
         },
-        reaction: {
-            type: String,
-            enum: ['like', 'love', 'laugh', 'angry', 'sad', 'wow']
+        emoji: {
+            type: String
         }
     }],
     isRead: {
@@ -57,6 +56,10 @@ const messageSchema = new mongoose.Schema({
         }
     }],
     isDeleted: {
+        type: Boolean,
+        default: false
+    },
+    isAI: {
         type: Boolean,
         default: false
     }

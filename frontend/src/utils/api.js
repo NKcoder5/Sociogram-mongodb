@@ -1,10 +1,8 @@
 import axios from 'axios';
 
 // Force production URL for deployed version
-const API_BASE_URL = window.location.hostname === 'sociogram-1.onrender.com' 
-  ? 'https://sociogram-n73b.onrender.com/api/v1'
-  : import.meta.env.VITE_API_URL || 
-    (import.meta.env.PROD ? 'https://social-media-pdbl.onrender.com/api/v1' : 'https://social-media-pdbl.onrender.com/api/v1');
+// Local API URL for development
+const API_BASE_URL = 'http://localhost:8000/api/v1';
 
 console.log('🌐 API Base URL:', API_BASE_URL);
 console.log('🏠 Current hostname:', window.location.hostname);
@@ -48,7 +46,7 @@ api.interceptors.response.use(
         window.location.href = '/login';
       }
     }
-    
+
     // Handle user not found for own profile (indicates invalid token)
     if (error.response?.status === 404 && error.config?.url?.includes('/user/profile') && !error.config?.url?.includes('/user/profile/')) {
       console.log('🔄 Own profile not found - token may be invalid');
@@ -60,7 +58,7 @@ api.interceptors.response.use(
         window.location.href = '/login';
       }
     }
-    
+
     return Promise.reject(error);
   }
 );
@@ -69,7 +67,7 @@ export const authAPI = {
   // Generic GET method for authenticated requests
   get: (endpoint) => api.get(endpoint),
   post: (endpoint, data) => api.post(endpoint, data),
-  
+
   // User authentication
   register: (userData) => api.post('/user/register', userData),
   login: (userData) => api.post('/user/login', userData),
@@ -98,7 +96,7 @@ export const postAPI = {
     for (let [key, value] of formData.entries()) {
       console.log(`  ${key}:`, value instanceof File ? `File(${value.name}, ${value.size} bytes)` : value);
     }
-    
+
     return api.post('/post/addpost', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
@@ -119,7 +117,7 @@ export const postAPI = {
 // Message API calls
 export const messageAPI = {
   // Core messaging
-  sendMessage: (receiverId, message, file = null) => 
+  sendMessage: (receiverId, message, file = null) =>
     api.post(`/message/send/${receiverId}`, { message, file }),
   getAllMessages: (userId) => api.get(`/message/all/${userId}`),
   getMessages: (userId) => api.get(`/message/all/${userId}`),
@@ -130,17 +128,17 @@ export const messageAPI = {
     api.post(`/message/conversation/${conversationId}/send`, { message, file }),
   createGroupChat: (data) => api.post('/message/group', data),
   deleteMessage: (messageId) => api.delete(`/message/delete/${messageId}`),
-  
+
   // File handling
-  uploadFile: (formData) => 
+  uploadFile: (formData) =>
     api.post('/message/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     }),
-  
+
   // Real-time features
   sendTyping: (receiverId, conversationId, isTyping) =>
     api.post('/message/typing', { receiverId, conversationId, isTyping }),
-  
+
   // AI-powered features
   aiChatAssistant: (data) => api.post('/message/ai/chat', data),
   ensureAIConversation: () => api.get('/message/ai/conversation'),
@@ -149,25 +147,25 @@ export const messageAPI = {
   translateMessage: (data) => api.post('/message/ai/translate', data),
   getConversationStarter: (targetUserId) => api.get(`/message/ai/starter/${targetUserId}`),
   moderateMessage: (data) => api.post('/message/ai/moderate', data),
-  
+
   // Search and filtering
   searchMessages: (params) => api.get('/message/search', { params }),
-  
+
   // Group management
   addGroupMember: (groupId, userId) => api.post(`/message/group/${groupId}/add`, { userId }),
   removeGroupMember: (groupId, userId) => api.post(`/message/group/${groupId}/remove`, { userId }),
   changeGroupRole: (groupId, userId, role) => api.post(`/message/group/${groupId}/role`, { userId, role }),
   leaveGroup: (groupId) => api.post(`/message/group/${groupId}/leave`),
   deleteGroup: (groupId) => api.delete(`/message/group/${groupId}`),
-  
+
   // Message actions
-  forwardMessage: (messageId, conversationIds, message) => 
+  forwardMessage: (messageId, conversationIds, message) =>
     api.post('/message/forward', { messageId, conversationIds, message }),
   starMessage: (messageId) => api.post(`/message/${messageId}/star`),
-  reportMessage: (messageId, reason, details) => 
+  reportMessage: (messageId, reason, details) =>
     api.post(`/message/${messageId}/report`, { reason, details }),
   editMessage: (messageId, content) => api.put(`/message/${messageId}`, { content }),
-  
+
   // Read receipts
   markAsRead: (messageId) => api.post(`/message/${messageId}/read`),
   getMessageStatus: (messageId) => api.get(`/message/${messageId}/status`)

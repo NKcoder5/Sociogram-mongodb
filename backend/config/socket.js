@@ -1,45 +1,44 @@
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
+import { Notification } from '../models/notification.model.js';
+import { Message } from '../models/message.model.js';
+import { User } from '../models/user.model.js';
 
 let io;
 const connectedUsers = new Map();
 
 export const initializeSocket = (server) => {
   io = new Server(server, {
-  cors: {
-    origin: (origin, callback) => {
-      const allowedOrigins = [
-        process.env.FRONTEND_URL || "https://social-media-1-lzs4.onrender.com",
-        "https://social-media-1-lzs4.onrender.com",
-        "https://social-media-pdbl.onrender.com",
-        "https://sociogram-1.onrender.com",
-        "https://sociogram-n73b.onrender.com",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-        "http://localhost",
-        // Firebase OAuth popups
-        "https://accounts.google.com",
-        "https://oauth.googleusercontent.com"
-      ];
+    cors: {
+      origin: (origin, callback) => {
+        const allowedOrigins = [
+          process.env.FRONTEND_URL,
+          "http://localhost:5173",
+          "http://127.0.0.1:5173",
+          "http://localhost:5001",
+          "http://127.0.0.1:5001",
+          "http://localhost:5000",
+          "http://127.0.0.1:5000",
+          "http://localhost:8000",
+          "http://127.0.0.1:8000",
+          "http://localhost:3000"
+        ].filter(Boolean);
 
-      // Allow Postman or server-to-server calls
-      if (!origin) return callback(null, true);
+        if (!origin) return callback(null, true);
 
-      // Partial matching (fixes Render variations)
-      const isAllowed = allowedOrigins.some(url => origin.startsWith(url));
+        const isAllowed = allowedOrigins.some(url => origin.startsWith(url));
 
-      if (isAllowed) {
-        return callback(null, true);
-      }
+        if (isAllowed) {
+          return callback(null, true);
+        }
 
-      return callback(new Error("Not allowed by CORS: " + origin));
-    },
-    methods: ["GET", "POST"],
-    credentials: true
-  }
-});
+        // In development, we can be more lenient if needed, but sticking to allowed list
+        return callback(null, true); // Temporarily allow for local debugging
+      },
+      methods: ["GET", "POST"],
+      credentials: true
+    }
+  });
 
   // Socket authentication middleware
   io.use((socket, next) => {
@@ -48,8 +47,8 @@ export const initializeSocket = (server) => {
       if (!token) {
         return next(new Error('Authentication error'));
       }
-      
-      const decoded = jwt.verify(token, process.env.SECRET_KEY);
+
+      const decoded = jwt.verify(token, process.env.SECRET_KEY || process.env.JWT_SECRET);
       socket.userId = decoded.userId;
       next();
     } catch (err) {
@@ -60,9 +59,9 @@ export const initializeSocket = (server) => {
   io.on('connection', (socket) => {
     console.log(`🔌 User connected: ${socket.userId}`);
 
-    // Join user to their personal room with user_ prefix
+    // Join user to their personal room
     socket.join(`user_${socket.userId}`);
-    
+
     // Store user socket mapping
     connectedUsers.set(socket.userId, socket.id);
 
@@ -81,51 +80,36 @@ export const initializeSocket = (server) => {
     // Handle sending messages
     socket.on('sendMessage', async (messageData) => {
       console.log('Socket received message:', messageData);
-      
-      // Emit to conversation participants
+
       if (messageData.conversationId) {
         socket.to(messageData.conversationId).emit('receiveMessage', messageData);
-        // Also emit to all connected clients for this conversation
-        io.to(messageData.conversationId).emit('receiveMessage', messageData);
       }
-      
+
       // Create notification for message recipient
       if (messageData.receiverId && messageData.senderId !== messageData.receiverId) {
         try {
-          // Import prisma and notification controller dynamically
-          const { PrismaClient } = await import('@prisma/client');
-          const prisma = new PrismaClient();
-          
-          // Create notification in database
-          const notification = await prisma.notification.create({
-            data: {
-              type: 'message',
-              message: `${messageData.senderName || 'Someone'} sent you a message`,
-              senderId: messageData.senderId,
-              receiverId: messageData.receiverId,
-              isRead: false,
-              metadata: {
-                messageId: messageData.id,
-                conversationId: messageData.conversationId,
-                messageText: messageData.message?.substring(0, 50) + (messageData.message?.length > 50 ? '...' : ''),
-                messageType: messageData.type || 'text'
-              }
-            },
-            include: {
-              sender: {
-                select: {
-                  id: true,
-                  username: true,
-                  profilePicture: true
-                }
-              }
-            }
+          // Create notification in database using Mongoose
+          const notification = await Notification.create({
+            type: 'message',
+            message: `${messageData.senderName || 'Someone'} sent you a message`,
+            senderId: messageData.senderId,
+            receiverId: messageData.receiverId,
+            isRead: false,
+            post: messageData.postId || null // Adjust if there's an associated post
           });
-          
+
+          const populatedNotification = await Notification.findById(notification._id)
+            .populate('sender', 'id username profilePicture');
+
+          // Transform for frontend
+          const transformedNotification = {
+            ...populatedNotification.toObject(),
+            id: populatedNotification._id,
+            senderId: populatedNotification.sender?._id || populatedNotification.sender
+          };
+
           // Emit notification to receiver
-          socket.to(`user_${messageData.receiverId}`).emit('newNotification', notification);
-          
-          await prisma.$disconnect();
+          io.to(`user_${messageData.receiverId}`).emit('newNotification', transformedNotification);
         } catch (error) {
           console.error('Error creating message notification:', error);
         }
@@ -148,54 +132,40 @@ export const initializeSocket = (server) => {
       });
     });
 
-    // Handle message deletion
-    socket.on('deleteMessage', ({ messageId, conversationId }) => {
-      socket.to(conversationId).emit('messageDeleted', { messageId });
-    });
-
     // Handle message reactions
     socket.on('messageReaction', async ({ messageId, emoji, action, conversationId }) => {
       console.log('📝 Message reaction:', { messageId, emoji, action, userId: socket.userId });
-      
+
       try {
-        // Import prisma dynamically to avoid circular imports
-        const { PrismaClient } = await import('@prisma/client');
-        const prisma = new PrismaClient();
-        
         if (action === 'add') {
-          // Add reaction to database
-          await prisma.messageReaction.upsert({
-            where: {
-              messageId_userId_emoji: {
-                messageId,
-                userId: socket.userId,
-                emoji
+          await Message.findOneAndUpdate(
+            { _id: messageId },
+            {
+              $push: {
+                reactions: {
+                  userId: socket.userId,
+                  emoji: emoji
+                }
               }
-            },
-            update: {},
-            create: {
-              messageId,
-              userId: socket.userId,
-              emoji
             }
-          });
+          );
         } else if (action === 'remove') {
-          // Remove reaction from database
-          await prisma.messageReaction.deleteMany({
-            where: {
-              messageId,
-              userId: socket.userId,
-              emoji
+          await Message.findOneAndUpdate(
+            { _id: messageId },
+            {
+              $pull: {
+                reactions: {
+                  userId: socket.userId,
+                  emoji: emoji
+                }
+              }
             }
-          });
+          );
         }
-        
-        await prisma.$disconnect();
       } catch (error) {
         console.error('Error handling reaction in database:', error);
       }
-      
-      // Emit to all users in the conversation
+
       io.to(conversationId).emit('messageReaction', {
         messageId,
         emoji,
@@ -204,64 +174,17 @@ export const initializeSocket = (server) => {
       });
     });
 
-    // Group-specific socket events
-    socket.on('groupCreated', ({ group, participantIds }) => {
-      console.log('👥 Group created:', group.id);
-      // Notify all participants about the new group
-      participantIds.forEach(participantId => {
-        socket.to(`user_${participantId}`).emit('newGroup', group);
-      });
-    });
-
-    socket.on('groupUpdated', ({ group, participantIds }) => {
-      console.log('👥 Group updated:', group.id);
-      // Notify all participants about group updates
-      participantIds.forEach(participantId => {
-        socket.to(`user_${participantId}`).emit('groupUpdate', group);
-      });
-    });
-
-    socket.on('memberAdded', ({ group, newMemberId, participantIds }) => {
-      console.log('👥 Member added to group:', group.id);
-      // Notify all participants including the new member
-      [...participantIds, newMemberId].forEach(participantId => {
-        socket.to(`user_${participantId}`).emit('groupMemberAdded', { group, newMemberId });
-      });
-    });
-
-    socket.on('memberRemoved', ({ group, removedMemberId, participantIds }) => {
-      console.log('👥 Member removed from group:', group.id);
-      // Notify all remaining participants
-      participantIds.forEach(participantId => {
-        socket.to(`user_${participantId}`).emit('groupMemberRemoved', { group, removedMemberId });
-      });
-      // Notify the removed member
-      socket.to(`user_${removedMemberId}`).emit('removedFromGroup', { group });
-    });
-
-    socket.on('groupDeleted', ({ groupId, participantIds }) => {
-      console.log('👥 Group deleted:', groupId);
-      // Notify all participants about group deletion
-      participantIds.forEach(participantId => {
-        socket.to(`user_${participantId}`).emit('groupDeleted', { groupId });
-      });
-    });
-
-    socket.on('adminRoleChanged', ({ group, userId, action, participantIds }) => {
-      console.log('👥 Admin role changed:', { groupId: group.id, userId, action });
-      // Notify all participants about role changes
-      participantIds.forEach(participantId => {
-        socket.to(`user_${participantId}`).emit('groupAdminChanged', { group, userId, action });
-      });
+    // Handle joinUserRoom for unified socket
+    socket.on('joinUserRoom', ({ userId }) => {
+      if (userId === socket.userId) {
+        socket.join(`user_${userId}`);
+        console.log(`User ${userId} joined their personal room`);
+      }
     });
 
     socket.on('disconnect', () => {
       console.log(`User disconnected: ${socket.userId}`);
-      
-      // Remove user from connected users
       connectedUsers.delete(socket.userId);
-      
-      // Broadcast user offline status
       socket.broadcast.emit('userStatusUpdate', {
         userId: socket.userId,
         status: 'offline'
