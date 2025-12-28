@@ -16,8 +16,8 @@ export NODE_ENV=production
 
 # Set production environment variables
 echo "🌐 Setting production environment variables..."
-export VITE_API_URL=https://sociogram-n73b.onrender.com/api/v1
-export VITE_SOCKET_URL=https://sociogram-n73b.onrender.com
+export VITE_API_URL=https://sociogram-mongodb-1.onrender.com/api/v1
+export VITE_SOCKET_URL=https://sociogram-mongodb-1.onrender.com
 
 # Build the application with production config
 echo "🔨 Building application for production..."
@@ -37,5 +37,5 @@ else
 fi
 
 echo "🎉 Frontend build complete and ready for deployment!"
-echo "🔗 Backend URL: https://sociogram-n73b.onrender.com"
-echo "🔗 Frontend URL: https://sociogram-1.onrender.com"
+echo "🔗 Backend URL: https://sociogram-mongodb-1.onrender.com"
+echo "🔗 Frontend URL: https://sociogram-mongodb-1-frontend.onrender.com"

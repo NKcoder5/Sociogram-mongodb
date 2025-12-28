@@ -96,7 +96,7 @@ export const markAsRead = async (req, res) => {
         const notification = await Notification.findOneAndUpdate(
             {
                 _id: notificationId,
-                receiverId: userId // Ensure user can only mark their own notifications
+                receiver: userId // Ensure user can only mark their own notifications
             },
             { isRead: true },
             { new: true }
@@ -157,7 +157,7 @@ export const deleteNotification = async (req, res) => {
 
         const result = await Notification.deleteOne({
             _id: notificationId,
-            receiverId: userId // Ensure user can only delete their own notifications
+            receiver: userId // Ensure user can only delete their own notifications
         });
 
         if (result.deletedCount === 0) {

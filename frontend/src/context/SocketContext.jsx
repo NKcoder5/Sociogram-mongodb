@@ -21,9 +21,8 @@ export const SocketProvider = ({ children }) => {
     if (user && user.token) {
       console.log('🔌 Initializing unified socket connection...');
 
-      // Force production URL for deployed version
       // Local Socket URL for development
-      const SOCKET_URL = 'http://localhost:8000';
+      const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8000';
 
       console.log('🌐 Socket connecting to:', SOCKET_URL);
 

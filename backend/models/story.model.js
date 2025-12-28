@@ -1,9 +1,13 @@
 import mongoose from "mongoose";
 
 const storySchema = new mongoose.Schema({
-    authorId: {
+    author: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
+        required: true
+    },
+    image: {
+        type: String,
         required: true
     },
     mediaUrl: {
@@ -12,7 +16,7 @@ const storySchema = new mongoose.Schema({
     mediaType: {
         type: String,
         enum: ['text', 'image', 'video'],
-        default: 'text'
+        default: 'image'
     },
     text: {
         type: String

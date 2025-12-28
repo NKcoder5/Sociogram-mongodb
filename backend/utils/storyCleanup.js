@@ -12,7 +12,7 @@ export const cleanupExpiredStories = async () => {
       expiresAt: {
         $lt: now
       }
-    }).populate('authorId', 'username');
+    }).populate('author', 'username');
 
     if (expiredStories.length === 0) {
       console.log('✅ No expired stories to clean up');
@@ -25,7 +25,7 @@ export const cleanupExpiredStories = async () => {
 
     // Delete expired stories and their views
     await StoryView.deleteMany({
-      story: { $in: expiredIds }
+      storyId: { $in: expiredIds }
     });
     const deleteResult = await Story.deleteMany({
       _id: { $in: expiredIds }
@@ -35,7 +35,7 @@ export const cleanupExpiredStories = async () => {
 
     // Log which stories were deleted
     expiredStories.forEach(story => {
-      console.log(`   - Deleted story by ${story.authorId?.username || 'Unknown'} (expired: ${story.expiresAt})`);
+      console.log(`   - Deleted story by ${story.author?.username || 'Unknown'} (expired: ${story.expiresAt})`);
     });
 
     return { cleaned: deleteResult.deletedCount };

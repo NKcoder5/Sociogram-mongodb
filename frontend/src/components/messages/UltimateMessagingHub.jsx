@@ -31,9 +31,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useFollow } from '../../context/FollowContext';
 import { useSocket } from '../../context/SocketContext';
 
-// Force production URL for deployed version
 // Local Socket URL for development
-const SOCKET_URL = 'http://localhost:8000';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8000';
 
 // Image component with fallback for failed loads
 const ImageWithFallback = ({ src, alt, fileName, onClick }) => {

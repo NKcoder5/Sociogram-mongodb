@@ -49,11 +49,11 @@ async function seedNotifications() {
 
         try {
           await Notification.create({
-            senderId: sender._id,
-            receiverId: receiver._id,
+            sender: sender._id,
+            receiver: receiver._id,
             type,
             message,
-            post: relatedPost,
+            postId: relatedPost,
             isRead: Math.random() > 0.6
           });
           notificationsCreated++;

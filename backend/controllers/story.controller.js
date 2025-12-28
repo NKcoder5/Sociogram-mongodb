@@ -142,14 +142,14 @@ export const markStoryAsViewed = async (req, res) => {
 
     // Check if already viewed
     const existingView = await StoryView.findOne({
-      story: storyId,
-      viewer: userId
+      storyId: storyId,
+      userId: userId
     });
 
     if (!existingView) {
       await StoryView.create({
-        story: storyId,
-        viewer: userId
+        storyId: storyId,
+        userId: userId
       });
     }
 
@@ -191,7 +191,7 @@ export const deleteStory = async (req, res) => {
     }
 
     // Delete views and story
-    await StoryView.deleteMany({ story: storyId });
+    await StoryView.deleteMany({ storyId: storyId });
     await Story.findByIdAndDelete(storyId);
 
     return res.status(200).json({

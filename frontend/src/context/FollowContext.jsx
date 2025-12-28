@@ -23,9 +23,8 @@ export const FollowProvider = ({ children }) => {
   // Initialize socket connection for notifications
   useEffect(() => {
     if (user && user.token) {
-      // Force production URL for deployed version
       // Local Socket URL for development
-      const SOCKET_URL = 'http://localhost:8000';
+      const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8000';
 
       const newSocket = io(SOCKET_URL, {
         auth: { token: user.token },
