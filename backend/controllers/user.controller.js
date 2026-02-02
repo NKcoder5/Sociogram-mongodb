@@ -28,7 +28,8 @@ export const register = async (req, res) => {
         const newUser = await User.create({
             username,
             email,
-            password: hashedPassword
+            password: hashedPassword,
+            provider: 'email'
         });
 
         // Generate token for the new user
@@ -574,7 +575,6 @@ export const firebaseAuth = async (req, res) => {
             user = await User.create({
                 username,
                 email: firebaseUser.email,
-                password: '', // Empty password for Firebase users
                 profilePicture: firebaseUser.photoURL || '',
                 bio: '',
                 firebaseUid: firebaseUser.uid,

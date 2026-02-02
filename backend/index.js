@@ -3,6 +3,11 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
 import http from "http";
+import dns from "dns";
+
+// Fix for MongoDB Atlas SRV connection issues on some networks
+dns.setServers(['8.8.8.8', '8.8.4.4']);
+
 import connectDB from "./utils/db.js";
 import userRoute from "./routes/user.route.js";
 import postRoute from "./routes/post.route.js";
@@ -39,8 +44,7 @@ const PORT = process.env.PORT || 8000;
 //middlewares
 app.use(express.json());
 app.use(cookieParser());
-// Build an allowlist and use a dynamic origin function so the server
-// echoes the allowed origin back in the Access-Control-Allow-Origin header.
+// Build an allowlist of origins
 const ALLOWED_ORIGINS = [
     process.env.FRONTEND_URL,
     'http://localhost:5173',
@@ -51,29 +55,29 @@ const ALLOWED_ORIGINS = [
     'http://127.0.0.1:5000',
     'http://localhost:8000',
     'http://127.0.0.1:8000',
-    'http://localhost:3000'
+    'http://localhost:3000',
+    'https://sociogram-mongodb-1.onrender.com',
+    'https://sociogram-1.onrender.com',
+    'https://sociogram-n73b.onrender.com'
 ].filter(Boolean);
 
 const corsOptions = {
     origin: (origin, callback) => {
-        // Allow non-browser requests like Postman (no origin)
-        if (!origin) return callback(null, true);
-
-        if (ALLOWED_ORIGINS.includes(origin)) {
-            return callback(null, true);
+        // Allow non-browser requests like Postman or same-origin requests
+        if (!origin || ALLOWED_ORIGINS.includes(origin) || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+            callback(null, true);
+        } else {
+            console.log('CORS blocked origin:', origin);
+            callback(new Error('Not allowed by CORS'));
         }
-
-        // If origin is not allowed, return an explicit error (browser will block)
-        return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Cookie']
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'X-Requested-With', 'Accept'],
+    exposedHeaders: ['Set-Cookie']
 };
-app.use(cors(corsOptions));
 
-// Handle preflight requests
-// app.options('*', cors(corsOptions));
+app.use(cors(corsOptions));
 
 //yha pr apni api ayengi
 app.use("/api/v1/user", userRoute);

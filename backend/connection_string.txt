@@ -1,0 +1,1 @@
+mongodb://nandhakumars:nandha4115@ac-ai8w110-shard-00-01.sstqeqz.mongodb.net:27017,ac-ai8w110-shard-00-00.sstqeqz.mongodb.net:27017,ac-ai8w110-shard-00-02.sstqeqz.mongodb.net:27017/sociogram?authSource=admin&replicaSet=atlas-boizmr-shard-0&retryWrites=true&w=majority

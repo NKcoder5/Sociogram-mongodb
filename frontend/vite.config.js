@@ -5,18 +5,13 @@ import react from '@vitejs/plugin-react'
 export default defineConfig(({ command, mode }) => {
   // Load env file based on `mode` in the current working directory.
   const env = loadEnv(mode, process.cwd(), '')
-  
+
   return {
     plugins: [react()],
     server: {
       host: '0.0.0.0',
       port: 5000,
       allowedHosts: true,
-      headers: {
-        'Cache-Control': 'no-cache',
-        'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
-        'Cross-Origin-Embedder-Policy': 'unsafe-none'
-      }
     },
     build: {
       outDir: 'dist',

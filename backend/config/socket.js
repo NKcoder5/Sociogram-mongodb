@@ -21,21 +21,20 @@ export const initializeSocket = (server) => {
           "http://127.0.0.1:5000",
           "http://localhost:8000",
           "http://127.0.0.1:8000",
-          "http://localhost:3000"
+          "http://localhost:3000",
+          "https://sociogram-mongodb-1.onrender.com",
+          "https://sociogram-1.onrender.com",
+          "https://sociogram-n73b.onrender.com"
         ].filter(Boolean);
 
-        if (!origin) return callback(null, true);
-
-        const isAllowed = allowedOrigins.some(url => origin.startsWith(url));
-
-        if (isAllowed) {
+        if (!origin || allowedOrigins.includes(origin) || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
           return callback(null, true);
         }
 
-        // In development, we can be more lenient if needed, but sticking to allowed list
-        return callback(null, true); // Temporarily allow for local debugging
+        console.log('Socket CORS blocked origin:', origin);
+        return callback(new Error('Not allowed by CORS'));
       },
-      methods: ["GET", "POST"],
+      methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
       credentials: true
     }
   });
