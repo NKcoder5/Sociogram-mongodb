@@ -59,9 +59,10 @@ export const FollowProvider = ({ children }) => {
   }, []);
 
   // Follow/unfollow a user
-  const toggleFollow = useCallback(async (user) => {
-    const userId = user.id || user._id;
+  const toggleFollow = useCallback(async (targetUser) => {
+    const userId = targetUser.id || targetUser._id;
     const wasFollowing = followingUsers.has(userId);
+    const currentUserId = user?.id || user?._id;
 
     try {
       // Set processing state
@@ -79,51 +80,57 @@ export const FollowProvider = ({ children }) => {
       });
 
       // Update counts optimistically
-      setFollowCounts(prev => ({
-        ...prev,
-        [userId]: {
+      setFollowCounts(prev => {
+        const next = { ...prev };
+        next[userId] = {
           ...prev[userId],
           followers: (prev[userId]?.followers || 0) + (wasFollowing ? -1 : 1)
-        },
-        // Update current user's following count optimistically
-        [user.id]: {
-          followers: prev[user.id]?.followers || 0,
-          following: (prev[user.id]?.following || 0) + (wasFollowing ? -1 : 1)
+        };
+        if (currentUserId) {
+          next[currentUserId] = {
+            ...prev[currentUserId],
+            following: (prev[currentUserId]?.following || 0) + (wasFollowing ? -1 : 1)
+          };
         }
-      }));
+        return next;
+      });
 
       // API call
       const response = await authAPI.followUser(userId);
 
       if (response.data.success) {
         // Update with actual counts from server
-        setFollowCounts(prev => ({
-          ...prev,
-          [userId]: {
+        setFollowCounts(prev => {
+          const next = { ...prev };
+          next[userId] = {
+            ...prev[userId],
             followers: response.data.targetUserFollowerCount,
             following: prev[userId]?.following || 0
-          },
-          // Update current user's following count
-          [user.id]: {
-            followers: prev[user.id]?.followers || 0,
-            following: (prev[user.id]?.following || 0) + (wasFollowing ? -1 : 1)
+          };
+          if (currentUserId) {
+            next[currentUserId] = {
+              ...prev[currentUserId],
+              followers: prev[currentUserId]?.followers || 0,
+              following: response.data.currentUserFollowingCount
+            };
           }
-        }));
+          return next;
+        });
 
-        console.log(`✅ ${response.data.action} ${user.username}`);
+        console.log(`✅ ${response.data.action} ${targetUser.username}`);
 
         // Send follow notification if user started following (not unfollowing)
         if (!wasFollowing && socket) {
           socket.emit('followNotification', {
             followedUserId: userId,
             followerName: user.username,
-            followerId: user.id
+            followerId: currentUserId
           });
         }
 
         // If mutual follow, log it
         if (response.data.isMutualFollow) {
-          console.log(`🤝 Mutual follow established with ${user.username}! You can now message each other.`);
+          console.log(`🤝 Mutual follow established with ${targetUser.username}! You can now message each other.`);
         }
 
         return {

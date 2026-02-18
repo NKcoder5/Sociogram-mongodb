@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { postAPI, authAPI } from '../../utils/api';
 import Post from './Post';
 import InteractivePost from '../interactive/InteractivePost';
@@ -20,34 +21,34 @@ const Feed = () => {
 
   const fetchPosts = useCallback(async (force = false) => {
     const now = Date.now();
-    
+
     // Prevent multiple rapid calls (debounce for 2 seconds)
     if (!force && (fetchingPosts || (lastFetchTime && (now - lastFetchTime) < 2000))) {
       console.log('⏳ Skipping fetch - already fetching or too recent');
       return;
     }
-    
+
     console.log('📡 Fetching posts from API...');
     setFetchingPosts(true);
     setLastFetchTime(now);
-    
+
     try {
       const response = await postAPI.getAllPosts();
       console.log('📦 Raw API response:', response.data);
-      
+
       const postsArray = response.data.posts || [];
       console.log('📊 Posts received:', postsArray.length);
-      
+
       // Log first few post IDs to check for duplicates
       const postIds = postsArray.map(p => p.id);
       console.log('🆔 Post IDs:', postIds.slice(0, 10));
-      
+
       // Check for duplicates in the raw data
       const duplicateIds = postIds.filter((id, index) => postIds.indexOf(id) !== index);
       if (duplicateIds.length > 0) {
         console.warn('⚠️ Duplicate IDs found in API response:', duplicateIds);
       }
-      
+
       // More robust deduplication using Map for better performance
       const postsMap = new Map();
       postsArray.forEach(post => {
@@ -55,13 +56,13 @@ const Feed = () => {
           postsMap.set(post.id, post);
         }
       });
-      
+
       const uniquePosts = Array.from(postsMap.values());
-      
+
       console.log('✅ Unique posts after deduplication:', uniquePosts.length);
       console.log('🆔 Unique post IDs:', uniquePosts.map(p => p.id));
       console.log('🔄 Setting posts state...');
-      
+
       // Set posts directly without clearing first
       setPosts(uniquePosts);
     } catch (error) {
@@ -93,7 +94,7 @@ const Feed = () => {
       setPosts(posts.filter(post => post.id !== postId));
     } else if (updatedPost) {
       // Update existing post
-      setPosts(posts.map(post => 
+      setPosts(posts.map(post =>
         post.id === updatedPost.id ? updatedPost : post
       ));
     }
@@ -147,18 +148,17 @@ const Feed = () => {
                   </div>
                 </div>
               </div>
-              
+
               {/* Tabs */}
               <div className="flex space-x-1 bg-gray-100 rounded-xl p-1">
                 {tabs.map((tab) => (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 flex-1 justify-center ${
-                      activeTab === tab.id
+                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 flex-1 justify-center ${activeTab === tab.id
                         ? 'bg-white text-purple-600 shadow-sm font-medium'
                         : 'text-gray-600 hover:text-gray-900'
-                    }`}
+                      }`}
                   >
                     <tab.icon className="w-4 h-4" />
                     <span>{tab.label}</span>
@@ -174,7 +174,7 @@ const Feed = () => {
               <Stories />
             </div>
           )}
-          
+
           {/* Content based on active tab */}
           {activeTab === 'for-you' && (
             <div className="space-y-6">
@@ -202,9 +202,11 @@ const Feed = () => {
                         <p className="text-gray-600 mb-4">
                           Start following people to see their posts in your feed.
                         </p>
-                        <button className="bg-gradient-to-r from-purple-500 to-blue-500 text-white px-6 py-3 rounded-xl font-medium hover:from-purple-600 hover:to-blue-600 transition-all duration-200">
-                          Explore Users
-                        </button>
+                        <Link to="/explore">
+                          <button className="bg-gradient-to-r from-purple-500 to-blue-500 text-white px-6 py-3 rounded-xl font-medium hover:from-purple-600 hover:to-blue-600 transition-all duration-200">
+                            Explore Users
+                          </button>
+                        </Link>
                       </div>
                     </div>
                   )}
@@ -213,14 +215,14 @@ const Feed = () => {
                 posts.map((post) => {
                   // Debug logging for each post
                   console.log('🎯 Rendering post:', post.id, post.caption?.substring(0, 30));
-                  
+
                   return (
-                    <div 
-                      key={post.id} 
+                    <div
+                      key={post.id}
                       className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all duration-300"
                     >
-                      <InteractivePost 
-                        post={post} 
+                      <InteractivePost
+                        post={post}
                         onPostUpdate={handlePostUpdate}
                       />
                     </div>

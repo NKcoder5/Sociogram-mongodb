@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { HeartIcon, ChatBubbleOvalLeftIcon, PaperAirplaneIcon, BookmarkIcon, EllipsisHorizontalIcon, TrashIcon, EyeIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartSolidIcon, BookmarkIcon as BookmarkSolidIcon } from '@heroicons/react/24/solid';
 import { postAPI } from '../../utils/api';
@@ -24,7 +25,7 @@ const InteractivePost = React.memo(({ post, onPostUpdate }) => {
   // Check if current user has liked this post
   useEffect(() => {
     if (post.likes && user) {
-      const userLiked = post.likes.some(like => 
+      const userLiked = post.likes.some(like =>
         like.userId === user.id || like.user?.id === user.id
       );
       setIsLiked(userLiked);
@@ -73,7 +74,7 @@ const InteractivePost = React.memo(({ post, onPostUpdate }) => {
 
       // Call the actual API
       await postAPI.likePost(post.id);
-      
+
       // Send notification to post owner if it's not the current user's post
       if (newLikedState && post.author?.id !== user.id && socket) {
         socket.emit('likeNotification', {
@@ -83,7 +84,7 @@ const InteractivePost = React.memo(({ post, onPostUpdate }) => {
           postImage: post.image
         });
       }
-      
+
       console.log(`${newLikedState ? 'Liked' : 'Unliked'} post ${post.id}`);
     } catch (error) {
       // Revert on error
@@ -120,10 +121,10 @@ const InteractivePost = React.memo(({ post, onPostUpdate }) => {
         author: { username: user.username, id: user.id },
         createdAt: new Date()
       };
-      
+
       setComments([...comments, comment]);
       setNewComment('');
-      
+
       // Send notification to post owner if it's not the current user's post
       if (post.author?.id !== user.id && socket) {
         socket.emit('commentNotification', {
@@ -134,7 +135,7 @@ const InteractivePost = React.memo(({ post, onPostUpdate }) => {
           postImage: post.image
         });
       }
-      
+
       console.log('Added comment:', newComment);
     } catch (error) {
       console.error('Error adding comment:', error);
@@ -150,12 +151,12 @@ const InteractivePost = React.memo(({ post, onPostUpdate }) => {
     try {
       const response = await postAPI.deletePost(post.id);
       console.log('Delete response:', response.data);
-      
+
       // Notify parent component to remove this post from the list
       if (onPostUpdate) {
         onPostUpdate(null, 'delete', post.id);
       }
-      
+
       // Show success message
       console.log('Post deleted successfully');
     } catch (error) {
@@ -177,22 +178,26 @@ const InteractivePost = React.memo(({ post, onPostUpdate }) => {
       {/* Post Header */}
       <div className="flex items-center justify-between p-4">
         <div className="flex items-center space-x-3">
-          <ProfilePicture user={post.author} size="small" />
+          <Link to={`/profile/${post.author?.username}`}>
+            <ProfilePicture user={post.author} size="small" />
+          </Link>
           <div>
-            <p className="font-semibold text-sm">{post.author?.username || 'Unknown User'}</p>
+            <Link to={`/profile/${post.author?.username}`}>
+              <p className="font-semibold text-sm hover:text-purple-600 transition-colors">{post.author?.username || 'Unknown User'}</p>
+            </Link>
             <p className="text-xs text-gray-500">
               {post.createdAt ? new Date(post.createdAt).toLocaleDateString() : 'Just now'}
             </p>
           </div>
         </div>
         <div className="relative delete-menu-container">
-          <button 
+          <button
             onClick={() => setShowDeleteMenu(!showDeleteMenu)}
             className="text-gray-500 hover:text-gray-700 p-1"
           >
             <EllipsisHorizontalIcon className="w-5 h-5" />
           </button>
-          
+
           {showDeleteMenu && (
             <div className="absolute right-0 top-8 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[150px]">
               <button
@@ -237,9 +242,8 @@ const InteractivePost = React.memo(({ post, onPostUpdate }) => {
           <img
             src={post.image}
             alt="Post"
-            className={`w-full h-full object-cover transition-opacity duration-300 cursor-pointer ${
-              imageLoading ? 'opacity-0' : 'opacity-100'
-            }`}
+            className={`w-full h-full object-cover transition-opacity duration-300 cursor-pointer ${imageLoading ? 'opacity-0' : 'opacity-100'
+              }`}
             onClick={handleImageClick}
             onDoubleClick={handleLike}
             onLoad={() => setImageLoading(false)}
@@ -263,7 +267,7 @@ const InteractivePost = React.memo(({ post, onPostUpdate }) => {
                 <HeartIcon className="w-6 h-6" />
               )}
             </button>
-            <button 
+            <button
               onClick={() => setShowComments(!showComments)}
               className="hover:text-gray-500"
             >
@@ -289,7 +293,9 @@ const InteractivePost = React.memo(({ post, onPostUpdate }) => {
 
         {/* Caption */}
         <div className="mb-2">
-          <span className="font-semibold text-sm mr-2">{post.author?.username}</span>
+          <Link to={`/profile/${post.author?.username}`}>
+            <span className="font-semibold text-sm mr-2 hover:text-purple-600 transition-colors">{post.author?.username}</span>
+          </Link>
           <span className="text-sm">{post.caption}</span>
         </div>
 
@@ -299,12 +305,16 @@ const InteractivePost = React.memo(({ post, onPostUpdate }) => {
             <div className="space-y-2 mb-3">
               {comments.map((comment) => (
                 <div key={comment.id || comment._id} className="flex items-start space-x-2">
-                  <ProfilePicture 
-                    user={comment.author || comment.user} 
-                    size="small" 
-                  />
+                  <Link to={`/profile/${comment.author?.username || comment.user?.username}`}>
+                    <ProfilePicture
+                      user={comment.author || comment.user}
+                      size="small"
+                    />
+                  </Link>
                   <div className="flex-1">
-                    <span className="font-semibold text-sm mr-2">{comment.author?.username || comment.user?.username || 'Unknown'}</span>
+                    <Link to={`/profile/${comment.author?.username || comment.user?.username}`}>
+                      <span className="font-semibold text-sm mr-2 hover:text-purple-600 transition-colors">{comment.author?.username || comment.user?.username || 'Unknown'}</span>
+                    </Link>
                     <span className="text-sm">{comment.text}</span>
                   </div>
                 </div>
@@ -334,7 +344,7 @@ const InteractivePost = React.memo(({ post, onPostUpdate }) => {
 
       {/* Image Modal */}
       {showImageModal && (
-        <div 
+        <div
           className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4"
           onClick={() => setShowImageModal(false)}
         >
@@ -352,7 +362,7 @@ const InteractivePost = React.memo(({ post, onPostUpdate }) => {
               alt="Post"
               className="max-w-full max-h-full object-contain rounded-lg"
             />
-            
+
             {/* Close instruction */}
             <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-white text-sm bg-black bg-opacity-50 px-3 py-1 rounded">
               Click outside or press ESC to close

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  MagnifyingGlassIcon, 
-  HeartIcon, 
+import {
+  MagnifyingGlassIcon,
+  HeartIcon,
   ChatBubbleOvalLeftIcon,
   UserPlusIcon,
   HashtagIcon,
@@ -11,18 +11,19 @@ import {
   SparklesIcon
 } from '@heroicons/react/24/outline';
 import { authAPI, messageAPI, postAPI } from '../../utils/api';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useFollow } from '../../context/FollowContext';
 
 const Discovery = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { toggleFollow, isFollowing, isProcessing } = useFollow();
   const [activeTab, setActiveTab] = useState('discover');
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [followingUsers, setFollowingUsers] = useState(new Set());
-  
+
   // Data states
   const [allUsers, setAllUsers] = useState([]);
   const [explorePosts, setExplorePosts] = useState([]);
@@ -88,32 +89,16 @@ const Discovery = () => {
       return;
     }
 
-    const filteredUsers = allUsers.filter(user => 
+    const filteredUsers = allUsers.filter(user =>
       user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (user.bio && user.bio.toLowerCase().includes(searchTerm.toLowerCase()))
     );
-    
+
     setSearchResults(filteredUsers);
   }, [searchTerm, allUsers]);
 
-  const handleFollowToggle = async (userId) => {
-    try {
-      const isFollowing = followingUsers.has(userId);
-      
-      if (isFollowing) {
-        await authAPI.unfollowUser(userId);
-        setFollowingUsers(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(userId);
-          return newSet;
-        });
-      } else {
-        await authAPI.followUser(userId);
-        setFollowingUsers(prev => new Set(prev).add(userId));
-      }
-    } catch (error) {
-      console.error('Error toggling follow:', error);
-    }
+  const handleFollowToggle = async (targetUser) => {
+    await toggleFollow(targetUser);
   };
 
   const handleStartChat = async (targetUser) => {
@@ -147,13 +132,17 @@ const Discovery = () => {
         <div className="w-80 flex flex-col">
           <div className="p-4 border-b border-gray-200">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-purple-400 to-blue-400 rounded-full flex items-center justify-center">
-                <span className="text-white font-semibold">
-                  {post.author?.username?.charAt(0).toUpperCase() || post.user?.username?.charAt(0).toUpperCase()}
-                </span>
-              </div>
+              <Link to={`/profile/${post.author?.username || post.user?.username}`}>
+                <div className="w-10 h-10 bg-gradient-to-br from-purple-400 to-blue-400 rounded-full flex items-center justify-center">
+                  <span className="text-white font-semibold">
+                    {post.author?.username?.charAt(0).toUpperCase() || post.user?.username?.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+              </Link>
               <div>
-                <span className="font-semibold">{post.author?.username || post.user?.username}</span>
+                <Link to={`/profile/${post.author?.username || post.user?.username}`}>
+                  <span className="font-semibold hover:text-purple-600 transition-colors">{post.author?.username || post.user?.username}</span>
+                </Link>
                 <p className="text-xs text-gray-500">2 hours ago</p>
               </div>
             </div>
@@ -182,45 +171,57 @@ const Discovery = () => {
     </div>
   );
 
-  const UserCard = ({ user, showActions = true }) => (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center space-x-3">
-          <div className="w-12 h-12 bg-gradient-to-br from-purple-400 to-blue-400 rounded-full flex items-center justify-center">
-            <span className="text-white font-semibold">
-              {user.username?.charAt(0).toUpperCase()}
-            </span>
+  const UserCard = ({ user, showActions = true }) => {
+    const userId = user.id || user._id;
+    const userIsFollowing = isFollowing(userId);
+    const userIsProcessing = isProcessing(userId);
+
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center space-x-3">
+            <Link to={`/profile/${user.username}`}>
+              <div className="w-12 h-12 bg-gradient-to-br from-purple-400 to-blue-400 rounded-full flex items-center justify-center">
+                <span className="text-white font-semibold">
+                  {user.username?.charAt(0).toUpperCase()}
+                </span>
+              </div>
+            </Link>
+            <div>
+              <Link to={`/profile/${user.username}`}>
+                <p className="font-semibold text-sm hover:text-purple-600 transition-colors">{user.username}</p>
+              </Link>
+              <p className="text-xs text-gray-500">{user.followers?.length || 0} followers</p>
+            </div>
           </div>
-          <div>
-            <p className="font-semibold text-sm">{user.username}</p>
-            <p className="text-xs text-gray-500">{user.followers?.length || 0} followers</p>
-          </div>
-        </div>
-        {showActions && (
-          <div className="flex items-center space-x-2">
-            <button 
-              onClick={() => handleStartChat(user)}
-              className="p-2 text-blue-500 hover:bg-blue-50 rounded-full transition-colors"
-              title="Send message"
-            >
-              <ChatBubbleOvalLeftIcon className="w-4 h-4" />
-            </button>
-            <button 
-              onClick={() => handleFollowToggle(user.id)}
-              className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${
-                followingUsers.has(user.id)
+          {showActions && (
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => handleStartChat(user)}
+                className="p-2 text-blue-500 hover:bg-blue-50 rounded-full transition-colors"
+                title="Send message"
+              >
+                <ChatBubbleOvalLeftIcon className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => handleFollowToggle(user)}
+                disabled={userIsProcessing}
+                className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${userIsFollowing
                   ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   : 'bg-gradient-to-r from-purple-500 to-blue-500 text-white hover:from-purple-600 hover:to-blue-600'
-              }`}
-            >
-              {followingUsers.has(user.id) ? 'Following' : 'Follow'}
-            </button>
-          </div>
-        )}
+                  } ${userIsProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {userIsProcessing ? (
+                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                ) : userIsFollowing ? 'Following' : 'Follow'}
+              </button>
+            </div>
+          )}
+        </div>
+        <p className="text-xs text-gray-600">{user.bio || 'No bio available'}</p>
       </div>
-      <p className="text-xs text-gray-600">{user.bio || 'No bio available'}</p>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="max-w-6xl mx-auto p-4">
@@ -253,11 +254,10 @@ const Discovery = () => {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-              activeTab === tab.id
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${activeTab === tab.id
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-600 hover:text-gray-900'
+              }`}
           >
             {tab.label}
           </button>

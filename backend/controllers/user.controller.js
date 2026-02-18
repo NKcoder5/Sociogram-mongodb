@@ -17,13 +17,23 @@ export const register = async (req, res) => {
                 success: false,
             });
         }
-        const user = await User.findOne({ email });
+        const user = await User.findOne({ $or: [{ email }, { username }] });
         if (user) {
+            const field = user.email === email ? "email" : "username";
             return res.status(401).json({
-                message: "Try different email",
+                message: `User with this ${field} already exists.`,
                 success: false,
             });
         };
+
+        if (!process.env.SECRET_KEY) {
+            console.error("🚨 SECRET_KEY is missing in environment variables!");
+            return res.status(500).json({
+                message: "Server configuration error: SECRET_KEY missing",
+                success: false
+            });
+        }
+
         const hashedPassword = await bcrypt.hash(password, 10);
         const newUser = await User.create({
             username,
@@ -32,32 +42,21 @@ export const register = async (req, res) => {
             provider: 'email'
         });
 
-        // Generate token for the new user
-        const token = await jwt.sign({ userId: newUser._id }, process.env.SECRET_KEY, { expiresIn: '1d' });
-
-        // Prepare user data (exclude password)
-        const userData = {
-            id: newUser._id,
-            username: newUser.username,
-            email: newUser.email,
-            profilePicture: newUser.profilePicture,
-            bio: newUser.bio,
-            followers: [],
-            following: [],
-            posts: []
-        };
-
-        return res.cookie('token', token, { httpOnly: true, sameSite: 'strict', maxAge: 1 * 24 * 60 * 60 * 1000 }).status(201).json({
-            message: `Welcome to Sociogram, ${newUser.username}!`,
+        return res.status(201).json({
+            message: `Account created successfully! Welcome to Sociogram, ${newUser.username}. Please sign in to continue.`,
             success: true,
-            user: userData,
-            token // Include token in response for frontend
+            user: {
+                id: newUser._id,
+                username: newUser.username,
+                email: newUser.email
+            }
         });
     } catch (error) {
-        console.log(error);
+        console.error("Register Error Details:", error);
         return res.status(500).json({
             message: 'Internal server error',
-            success: false
+            success: false,
+            error: error.message
         });
     }
 }
@@ -79,6 +78,13 @@ export const login = async (req, res) => {
             });
         }
 
+        if (!user.password) {
+            return res.status(401).json({
+                message: "This account was created using social login. Please Sign In with Google/Firebase.",
+                success: false,
+            });
+        }
+
         const isPasswordMatch = await bcrypt.compare(password, user.password);
         if (!isPasswordMatch) {
             return res.status(401).json({
@@ -86,6 +92,11 @@ export const login = async (req, res) => {
                 success: false,
             });
         };
+
+        if (!process.env.SECRET_KEY) {
+            console.error("🚨 SECRET_KEY is missing in environment variables!");
+            throw new Error("SECRET_KEY is not configured");
+        }
 
         const token = await jwt.sign({ userId: user._id }, process.env.SECRET_KEY, { expiresIn: '1d' });
 
@@ -110,10 +121,11 @@ export const login = async (req, res) => {
             token // Include token in response for frontend
         });
     } catch (error) {
-        console.log(error);
+        console.error("Login Error Details:", error);
         return res.status(500).json({
             message: 'Internal server error',
-            success: false
+            success: false,
+            error: error.message
         });
     }
 };

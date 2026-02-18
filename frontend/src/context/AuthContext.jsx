@@ -19,14 +19,14 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     checkAuthStatus();
-    
+
     // Listen for storage events to update auth state
     const handleStorageChange = () => {
       checkAuthStatus();
     };
-    
+
     window.addEventListener('storage', handleStorageChange);
-    
+
     return () => {
       window.removeEventListener('storage', handleStorageChange);
     };
@@ -36,7 +36,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const token = localStorage.getItem('token');
       const storedUser = localStorage.getItem('user');
-      
+
       if (token && storedUser) {
         try {
           // Try to get fresh profile data
@@ -85,11 +85,11 @@ export const AuthProvider = ({ children }) => {
       const response = await authAPI.login(credentials);
       const userData = response.data.user;
       const token = response.data.token;
-      
+
       // Store token and user data
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(userData));
-      
+
       // Add token to user object for socket authentication
       const userWithToken = { ...userData, token };
       setUser(userWithToken);
@@ -102,16 +102,6 @@ export const AuthProvider = ({ children }) => {
   const register = async (userData) => {
     try {
       const response = await authAPI.register(userData);
-      const userResponse = response.data.user;
-      const token = response.data.token;
-      
-      // Store token and user data
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(userResponse));
-      
-      // Add token to user object for socket authentication
-      const userWithToken = { ...userResponse, token };
-      setUser(userWithToken);
       return { success: true, data: response.data };
     } catch (error) {
       return { success: false, error: error.response?.data?.message || 'Registration failed' };

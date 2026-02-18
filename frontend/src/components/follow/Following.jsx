@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Users, UserMinus, MessageCircle } from 'lucide-react';
 import { authAPI } from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
@@ -95,8 +95,8 @@ const Following = () => {
             <Users className="w-12 h-12 text-gray-300 mx-auto mb-4" />
             <h4 className="font-medium text-gray-900 mb-2">No Following Yet</h4>
             <p className="text-sm text-gray-600">
-              {isOwnProfile 
-                ? "Start following people to see them here" 
+              {isOwnProfile
+                ? "Start following people to see them here"
                 : "This user isn't following anyone yet"
               }
             </p>
@@ -106,55 +106,57 @@ const Following = () => {
             <div key={user.id} className="p-4 hover:bg-gray-50 transition-colors duration-200">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
-                  <div className="relative">
-                    <div className="w-12 h-12 bg-gradient-to-br from-purple-400 to-blue-400 rounded-full flex items-center justify-center shadow-md">
-                      {user.profilePicture ? (
-                        <img
-                          src={user.profilePicture}
-                          alt={user.username}
-                          className="w-full h-full rounded-full object-cover"
-                        />
-                      ) : (
-                        <span className="text-white font-semibold">
-                          {user.username?.charAt(0).toUpperCase()}
-                        </span>
-                      )}
+                  <Link to={`/profile/${user.username}`}>
+                    <div className="relative">
+                      <div className="w-12 h-12 bg-gradient-to-br from-purple-400 to-blue-400 rounded-full flex items-center justify-center shadow-md">
+                        {user.profilePicture ? (
+                          <img
+                            src={user.profilePicture}
+                            alt={user.username}
+                            className="w-full h-full rounded-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-white font-semibold">
+                            {user.username?.charAt(0).toUpperCase()}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  
-                  <div className="flex-1">
-                    <h4 className="font-semibold text-gray-900 hover:text-purple-600 cursor-pointer transition-colors">
-                      {user.username}
-                    </h4>
-                    <p className="text-sm text-gray-600">@{user.username}</p>
+                  </Link>
+
+                  <div className="flex-1 min-w-0">
+                    <Link to={`/profile/${user.username}`}>
+                      <h4 className="font-semibold text-gray-900 hover:text-purple-600 cursor-pointer transition-colors truncate">
+                        {user.username}
+                      </h4>
+                    </Link>
+                    <p className="text-sm text-gray-600 truncate">@{user.username}</p>
                     {user.bio && (
-                      <p className="text-xs text-gray-500 mt-1 truncate max-w-48">
+                      <p className="text-xs text-gray-500 mt-1 truncate">
                         {user.bio}
                       </p>
                     )}
                   </div>
                 </div>
-                
-                {isOwnProfile && (
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => handleMessage(user)}
-                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all duration-200"
-                      title="Send Message"
-                    >
-                      <MessageCircle className="w-4 h-4" />
-                    </button>
-                    
-                    <button
-                      onClick={() => handleUnfollow(user)}
-                      disabled={isProcessing(user.id)}
-                      className="flex items-center space-x-1 bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-red-50 hover:text-red-600 transition-all duration-200 text-sm disabled:opacity-50"
-                    >
-                      <UserMinus className="w-3 h-3" />
-                      <span>{isProcessing(user.id) ? 'Unfollowing...' : 'Unfollow'}</span>
-                    </button>
-                  </div>
-                )}
+
+                <div className="flex items-center space-x-2 flex-shrink-0">
+                  <button
+                    onClick={() => handleMessage(user)}
+                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all duration-200"
+                    title="Send Message"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    onClick={() => handleUnfollow(user)}
+                    disabled={isProcessing(user.id)}
+                    className="flex items-center space-x-1 bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg font-medium hover:bg-red-50 hover:text-red-600 transition-all duration-200 text-sm disabled:opacity-50 min-w-[90px] justify-center"
+                  >
+                    <UserMinus className="w-3 h-3" />
+                    <span>{isProcessing(user.id) ? 'Unfollowing...' : 'Unfollow'}</span>
+                  </button>
+                </div>
               </div>
             </div>
           ))

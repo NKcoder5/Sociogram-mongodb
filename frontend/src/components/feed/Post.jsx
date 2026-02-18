@@ -1,21 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  HeartIcon, 
-  ChatBubbleOvalLeftIcon, 
+import {
+  HeartIcon,
+  ChatBubbleOvalLeftIcon,
   PaperAirplaneIcon,
   BookmarkIcon,
-  EllipsisHorizontalIcon 
+  EllipsisHorizontalIcon
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
 import { postAPI } from '../../utils/api';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationContext';
+import { useFollow } from '../../context/FollowContext';
 import PostReactions from '../reactions/PostReactions';
 import { Clock, MapPin, MoreHorizontal, Send, MessageCircle } from 'lucide-react';
 
 const Post = ({ post, onPostUpdate }) => {
   const { user } = useAuth();
   const { socket } = useNotifications();
+  const { toggleFollow, isFollowing, isProcessing } = useFollow();
   const [liked, setLiked] = useState(false);
   const [likesCount, setLikesCount] = useState(post.likes?.length || 0);
   const [showComments, setShowComments] = useState(false);
@@ -26,7 +29,7 @@ const Post = ({ post, onPostUpdate }) => {
   // Check if current user has liked this post
   useEffect(() => {
     if (post.likes && user) {
-      const userLiked = post.likes.some(like => 
+      const userLiked = post.likes.some(like =>
         like.id === user.id || like._id === user.id || like === user.id
       );
       setLiked(userLiked);
@@ -41,7 +44,7 @@ const Post = ({ post, onPostUpdate }) => {
       } else {
         await postAPI.likePost(post.id || post._id);
         setLikesCount(prev => prev + 1);
-        
+
         // Send notification to post owner if it's not the current user's post
         if (post.author?.id !== user.id && socket) {
           socket.emit('likeNotification', {
@@ -53,13 +56,13 @@ const Post = ({ post, onPostUpdate }) => {
         }
       }
       setLiked(!liked);
-      
+
       // Update parent component if callback provided
       if (onPostUpdate) {
         onPostUpdate({
           ...post,
-          likes: liked 
-            ? post.likes?.filter(like => like !== user.id) 
+          likes: liked
+            ? post.likes?.filter(like => like !== user.id)
             : [...(post.likes || []), user.id]
         });
       }
@@ -74,15 +77,15 @@ const Post = ({ post, onPostUpdate }) => {
 
     try {
       const response = await postAPI.addComment(post.id || post._id, comment);
-      const newComment = response.data.comment || { 
-        id: Date.now(), 
-        text: comment, 
+      const newComment = response.data.comment || {
+        id: Date.now(),
+        text: comment,
         author: { username: user.username, id: user.id },
         createdAt: new Date()
       };
       setComments([...comments, newComment]);
       setComment('');
-      
+
       // Send notification to post owner if it's not the current user's post
       if (post.author?.id !== user.id && socket) {
         socket.emit('commentNotification', {
@@ -102,7 +105,7 @@ const Post = ({ post, onPostUpdate }) => {
     const now = new Date();
     const postDate = new Date(date);
     const diffInMinutes = Math.floor((now - postDate) / (1000 * 60));
-    
+
     if (diffInMinutes < 1) return 'just now';
     if (diffInMinutes < 60) return `${diffInMinutes}m`;
     if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h`;
@@ -114,23 +117,38 @@ const Post = ({ post, onPostUpdate }) => {
       {/* Post Header */}
       <div className="flex items-center justify-between p-6">
         <div className="flex items-center space-x-4">
-          <div className="relative">
-            <div className="w-12 h-12 bg-gradient-to-br from-purple-400 to-blue-400 rounded-full flex items-center justify-center ring-2 ring-white shadow-lg">
-              <span className="text-white font-semibold text-lg">
-                {post.author.username?.charAt(0).toUpperCase()}
-              </span>
+          <Link to={`/profile/${post.author.username}`}>
+            <div className="relative">
+              <div className="w-12 h-12 bg-gradient-to-br from-purple-400 to-blue-400 rounded-full flex items-center justify-center ring-2 ring-white shadow-lg">
+                <span className="text-white font-semibold text-lg">
+                  {post.author.username?.charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
             </div>
-            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>
-          </div>
+          </Link>
           <div className="flex-1">
             <div className="flex items-center space-x-2">
-              <h3 className="font-semibold text-gray-900 hover:text-purple-600 cursor-pointer transition-colors">
-                {post.author.username}
-              </h3>
+              <Link to={`/profile/${post.author.username}`}>
+                <h3 className="font-semibold text-gray-900 hover:text-purple-600 cursor-pointer transition-colors">
+                  {post.author.username}
+                </h3>
+              </Link>
               <span className="text-blue-600 text-sm">•</span>
-              <button className="text-sm text-blue-600 hover:text-blue-700 font-medium">
-                Follow
-              </button>
+              {post.author.id !== user?.id && (
+                <button
+                  onClick={() => toggleFollow(post.author)}
+                  disabled={isProcessing(post.author.id || post.author._id)}
+                  className={`text-sm font-medium transition-colors ${isFollowing(post.author.id || post.author._id)
+                      ? 'text-gray-500 hover:text-gray-700'
+                      : 'text-blue-600 hover:text-blue-700'
+                    }`}
+                >
+                  {isProcessing(post.author.id || post.author._id)
+                    ? '...'
+                    : isFollowing(post.author.id || post.author._id) ? 'Following' : 'Follow'}
+                </button>
+              )}
             </div>
             <div className="flex items-center space-x-3 mt-1">
               <div className="flex items-center space-x-1 text-gray-500 text-sm">
@@ -161,9 +179,9 @@ const Post = ({ post, onPostUpdate }) => {
       {/* Post Image */}
       {post.image && (
         <div className="relative group bg-gray-50 w-full h-80 sm:h-96 overflow-hidden">
-          <img 
-            src={post.image} 
-            alt="Post content" 
+          <img
+            src={post.image}
+            alt="Post content"
             className="w-full h-full object-cover"
           />
           <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-all duration-300"></div>
@@ -175,11 +193,10 @@ const Post = ({ post, onPostUpdate }) => {
         {/* Action Buttons */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-6">
-            <button 
-              onClick={handleLike} 
-              className={`flex items-center space-x-2 transition-all duration-200 ${
-                liked ? 'text-red-500' : 'text-gray-600 hover:text-red-500'
-              }`}
+            <button
+              onClick={handleLike}
+              className={`flex items-center space-x-2 transition-all duration-200 ${liked ? 'text-red-500' : 'text-gray-600 hover:text-red-500'
+                }`}
             >
               {liked ? (
                 <HeartIconSolid className="h-6 w-6 animate-pulse" />
@@ -188,25 +205,24 @@ const Post = ({ post, onPostUpdate }) => {
               )}
               <span className="font-medium text-sm">{likesCount}</span>
             </button>
-            
-            <button 
+
+            <button
               onClick={() => setShowComments(!showComments)}
               className="flex items-center space-x-2 text-gray-600 hover:text-blue-500 transition-colors"
             >
               <MessageCircle className="h-6 w-6" />
               <span className="font-medium text-sm">{comments.length}</span>
             </button>
-            
+
             <button className="text-gray-600 hover:text-green-500 transition-colors">
               <Send className="h-6 w-6" />
             </button>
           </div>
-          
-          <button 
+
+          <button
             onClick={() => setIsBookmarked(!isBookmarked)}
-            className={`transition-colors ${
-              isBookmarked ? 'text-yellow-500' : 'text-gray-600 hover:text-yellow-500'
-            }`}
+            className={`transition-colors ${isBookmarked ? 'text-yellow-500' : 'text-gray-600 hover:text-yellow-500'
+              }`}
           >
             <BookmarkIcon className="h-6 w-6" />
           </button>
@@ -214,8 +230,8 @@ const Post = ({ post, onPostUpdate }) => {
 
         {/* Post Reactions */}
         <div className="mb-4 p-4 bg-gray-50 rounded-xl">
-          <PostReactions 
-            postId={post.id} 
+          <PostReactions
+            postId={post.id}
             initialReactions={post.reactions || []}
             onReactionUpdate={(reactions, userReaction) => {
               if (onPostUpdate) {
@@ -229,26 +245,30 @@ const Post = ({ post, onPostUpdate }) => {
         {comments.length > 0 && (
           <div className="space-y-3 mb-4">
             {!showComments && comments.length > 2 ? (
-              <button 
+              <button
                 onClick={() => setShowComments(true)}
                 className="text-gray-500 text-sm hover:text-gray-700 transition-colors"
               >
                 View all {comments.length} comments
               </button>
             ) : null}
-            
+
             {(showComments ? comments : comments.slice(-2)).map((comment, index) => (
               <div key={index} className="flex items-start space-x-3">
-                <div className="w-8 h-8 bg-gradient-to-br from-purple-400 to-blue-400 rounded-full flex items-center justify-center flex-shrink-0">
-                  <span className="text-white text-xs font-semibold">
-                    {comment.author?.username?.charAt(0).toUpperCase()}
-                  </span>
-                </div>
+                <Link to={`/profile/${comment.author?.username}`}>
+                  <div className="w-8 h-8 bg-gradient-to-br from-purple-400 to-blue-400 rounded-full flex items-center justify-center flex-shrink-0">
+                    <span className="text-white text-xs font-semibold">
+                      {comment.author?.username?.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                </Link>
                 <div className="flex-1 bg-gray-50 rounded-2xl px-4 py-3">
                   <div className="flex items-center space-x-2 mb-1">
-                    <span className="font-semibold text-sm text-gray-900">
-                      {comment.author?.username}
-                    </span>
+                    <Link to={`/profile/${comment.author?.username}`}>
+                      <span className="font-semibold text-sm text-gray-900 hover:text-purple-600 transition-colors">
+                        {comment.author?.username}
+                      </span>
+                    </Link>
                     <span className="text-xs text-gray-500">2m</span>
                   </div>
                   <p className="text-gray-700 text-sm">
@@ -274,7 +294,7 @@ const Post = ({ post, onPostUpdate }) => {
               className="w-full bg-gray-100 rounded-full px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all duration-200"
             />
             {comment.trim() && (
-              <button 
+              <button
                 type="submit"
                 className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-purple-500 text-white rounded-full p-2 hover:bg-purple-600 transition-colors"
               >

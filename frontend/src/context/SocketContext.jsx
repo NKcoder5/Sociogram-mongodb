@@ -22,7 +22,11 @@ export const SocketProvider = ({ children }) => {
       console.log('🔌 Initializing unified socket connection...');
 
       // Local Socket URL for development
-      const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8000';
+      const isProduction = window.location.hostname.includes('onrender.com');
+      const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ||
+        (isProduction
+          ? 'https://sociogram-mongodb.onrender.com'
+          : 'http://localhost:8000');
 
       console.log('🌐 Socket connecting to:', SOCKET_URL);
 

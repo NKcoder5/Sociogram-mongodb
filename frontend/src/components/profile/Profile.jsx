@@ -4,15 +4,17 @@ import { CogIcon, UserPlusIcon, UserMinusIcon } from '@heroicons/react/24/outlin
 import { authAPI, postAPI } from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
 import ProfilePicture from './ProfilePicture';
+import { useFollow } from '../../context/FollowContext';
 
 const Profile = () => {
   const { username } = useParams();
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
+  const { toggleFollow, isFollowing: checkIsFollowing, isProcessing } = useFollow();
   const [user, setUser] = useState(null);
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isFollowing, setIsFollowing] = useState(false);
+  const isFollowing = user ? checkIsFollowing(user.id || user._id) : false;
 
   useEffect(() => {
     if (username) {
@@ -25,7 +27,7 @@ const Profile = () => {
       setLoading(true);
       let profileResponse;
       let postsResponse;
-      
+
       if (username === currentUser?.username || !username) {
         // Fetch current user's profile
         console.log('Fetching current user profile');
@@ -44,7 +46,7 @@ const Profile = () => {
             const allUsersResponse = await authAPI.getSuggestedUsers();
             const allUsers = allUsersResponse.data.users || [];
             const foundUser = allUsers.find(u => u.username === username);
-            
+
             if (foundUser) {
               console.log('Found user in suggested users:', foundUser);
               setUser(foundUser);
@@ -62,27 +64,21 @@ const Profile = () => {
           } catch (searchError) {
             console.error('Error searching for user:', searchError);
           }
-          
+
           // If still not found, show error
           throw new Error(`User ${username} not found`);
         }
       }
-      
+
       const userData = profileResponse.data.user || profileResponse.data;
       console.log('Profile user data:', userData);
       setUser(userData);
-      
+
       const postsData = postsResponse.data.posts || postsResponse.data || [];
       console.log('Profile posts data:', postsData);
       setPosts(postsData);
-      
-      // Check if current user is following this profile user
-      if (userData.followers && currentUser) {
-        setIsFollowing(userData.followers.some(follower => 
-          follower.id === currentUser.id || follower._id === currentUser.id ||
-          follower.followerId === currentUser.id
-        ));
-      }
+
+      // Follow state is now checked via FollowContext in the render phase
     } catch (error) {
       console.error('Error fetching profile:', error);
       setUser(null);
@@ -93,26 +89,8 @@ const Profile = () => {
   };
 
   const handleFollowToggle = async () => {
-    try {
-      console.log('Toggling follow for user:', user.id);
-      await authAPI.followUnfollow(user.id);
-      setIsFollowing(!isFollowing);
-      
-      // Update follower count optimistically
-      if (user) {
-        const updatedUser = {
-          ...user,
-          followers: isFollowing 
-            ? (user.followers || []).filter(f => f.id !== currentUser.id)
-            : [...(user.followers || []), { id: currentUser.id }]
-        };
-        setUser(updatedUser);
-      }
-    } catch (error) {
-      console.error('Error toggling follow:', error);
-      // Revert the optimistic update on error
-      setIsFollowing(isFollowing);
-    }
+    if (!user) return;
+    await toggleFollow(user);
   };
 
   if (loading) {
@@ -139,51 +117,51 @@ const Profile = () => {
         {/* Profile Header */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8 mb-8">
           <div className="flex flex-col md:flex-row items-center md:items-start space-y-6 md:space-y-0 md:space-x-8">
-            <ProfilePicture 
-              user={user} 
-              size="xlarge" 
+            <ProfilePicture
+              user={user}
+              size="xlarge"
               editable={isOwnProfile}
               onUpdate={(updatedUser) => setUser(updatedUser)}
             />
-        
+
             <div className="flex-1 text-center md:text-left">
               <div className="flex flex-col md:flex-row items-center md:items-start space-y-4 md:space-y-0 md:space-x-4 mb-6">
                 <h1 className="text-3xl font-bold text-gray-900">{user.username}</h1>
-                
+
                 {isOwnProfile ? (
-                  <button 
+                  <button
                     onClick={() => navigate('/settings')}
                     className="px-6 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl transition-colors"
                   >
                     Edit Profile
                   </button>
                 ) : (
-                  <button 
+                  <button
                     onClick={handleFollowToggle}
-                    className={`px-6 py-2 font-semibold rounded-xl transition-all duration-200 ${
-                      isFollowing 
-                        ? 'bg-gray-100 hover:bg-gray-200 text-gray-700' 
+                    disabled={isProcessing(user.id || user._id)}
+                    className={`px-6 py-2 font-semibold rounded-xl transition-all duration-200 ${isFollowing
+                        ? 'bg-gray-100 hover:bg-gray-200 text-gray-700'
                         : 'bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white'
-                    }`}
+                      } ${isProcessing(user.id || user._id) ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
-                    {isFollowing ? 'Unfollow' : 'Follow'}
+                    {isProcessing(user.id || user._id) ? 'Processing...' : (isFollowing ? 'Unfollow' : 'Follow')}
                   </button>
                 )}
               </div>
-              
+
               <div className="flex justify-center md:justify-start space-x-8 mb-6">
                 <div className="text-center">
                   <div className="text-2xl font-bold text-gray-900">{posts.length}</div>
                   <div className="text-gray-600 text-sm">Posts</div>
                 </div>
-                <button 
+                <button
                   onClick={() => navigate(`/profile/${user.id}/followers`)}
                   className="text-center hover:text-purple-600 transition-colors"
                 >
                   <div className="text-2xl font-bold text-gray-900">{user.followers?.length || 0}</div>
                   <div className="text-gray-600 text-sm">Followers</div>
                 </button>
-                <button 
+                <button
                   onClick={() => navigate(`/profile/${user.id}/following`)}
                   className="text-center hover:text-purple-600 transition-colors"
                 >
@@ -191,7 +169,7 @@ const Profile = () => {
                   <div className="text-gray-600 text-sm">Following</div>
                 </button>
               </div>
-              
+
               {user.bio && (
                 <p className="text-gray-700 leading-relaxed">{user.bio}</p>
               )}
@@ -204,7 +182,7 @@ const Profile = () => {
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-bold text-gray-900">Posts</h2>
             {isOwnProfile && (
-              <button 
+              <button
                 onClick={() => navigate('/create')}
                 className="px-4 py-2 bg-gradient-to-r from-purple-500 to-blue-500 text-white font-semibold rounded-xl hover:from-purple-600 hover:to-blue-600 transition-all duration-200"
               >
@@ -212,7 +190,7 @@ const Profile = () => {
               </button>
             )}
           </div>
-          
+
           {posts.length === 0 ? (
             <div className="text-center py-16">
               <div className="w-24 h-24 mx-auto mb-4 bg-gradient-to-br from-purple-100 to-blue-100 rounded-full flex items-center justify-center">
@@ -223,7 +201,7 @@ const Profile = () => {
                 {isOwnProfile ? "Share your first moment!" : `${user.username} hasn't posted anything yet.`}
               </p>
               {isOwnProfile && (
-                <button 
+                <button
                   onClick={() => navigate('/create')}
                   className="px-6 py-3 bg-gradient-to-r from-purple-500 to-blue-500 text-white font-semibold rounded-xl hover:from-purple-600 hover:to-blue-600 transition-all duration-200"
                 >
@@ -236,8 +214,8 @@ const Profile = () => {
               {posts.map((post) => (
                 <div key={post._id || post.id} className="group relative bg-gray-100 rounded-xl overflow-hidden aspect-square">
                   {post.image && (
-                    <img 
-                      src={post.image} 
+                    <img
+                      src={post.image}
                       alt="Post"
                       className="w-full h-full object-cover cursor-pointer group-hover:scale-105 transition-transform duration-200"
                     />

@@ -4,6 +4,7 @@ import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
 import http from "http";
 import dns from "dns";
+import mongoose from "mongoose";
 
 // Fix for MongoDB Atlas SRV connection issues on some networks
 dns.setServers(['8.8.8.8', '8.8.4.4']);
@@ -63,8 +64,9 @@ const ALLOWED_ORIGINS = [
 
 const corsOptions = {
     origin: (origin, callback) => {
+        const isRenderOrigin = origin && origin.endsWith('onrender.com');
         // Allow non-browser requests like Postman or same-origin requests
-        if (!origin || ALLOWED_ORIGINS.includes(origin) || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+        if (!origin || ALLOWED_ORIGINS.includes(origin) || isRenderOrigin || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
             callback(null, true);
         } else {
             console.log('CORS blocked origin:', origin);
@@ -125,8 +127,10 @@ app.get("/", (req, res) => {
 
 // Health check endpoint
 app.get("/health", (req, res) => {
+    const dbStatus = mongoose.connection.readyState === 1 ? "connected" : "disconnected";
     res.json({
-        status: "healthy",
+        status: dbStatus === "connected" ? "healthy" : "degraded",
+        database: dbStatus,
         timestamp: new Date().toISOString(),
         uptime: process.uptime()
     });
