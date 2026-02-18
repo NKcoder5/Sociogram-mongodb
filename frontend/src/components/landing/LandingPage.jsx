@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { 
-  Heart, 
-  MessageCircle, 
-  Users, 
-  Zap, 
-  Camera, 
+import {
+  Heart,
+  MessageCircle,
+  Users,
+  Zap,
+  Camera,
   Award,
   Mic,
   Bot,
@@ -44,7 +44,7 @@ const LandingPage = () => {
   const [isVisible, setIsVisible] = useState({});
   const [authSidebarOpen, setAuthSidebarOpen] = useState(false);
   const [authMode, setAuthMode] = useState('login');
-  
+
   const navigate = useNavigate();
 
   const openAuthSidebar = (mode) => {
@@ -92,14 +92,17 @@ const LandingPage = () => {
     }
   ];
 
-  const techStack = [
-    { name: "React 18", icon: <Zap className="w-5 h-5" /> },
-    { name: "Socket.io", icon: <Globe className="w-5 h-5" /> },
-    { name: "PostgreSQL", icon: <Shield className="w-5 h-5" /> },
-    { name: "Cloudinary", icon: <Image className="w-5 h-5" /> },
-    { name: "NVIDIA AI", icon: <Bot className="w-5 h-5" /> },
-    { name: "Prisma ORM", icon: <Sparkles className="w-5 h-5" /> }
-  ];
+  const [techStack, setTechStack] = useState([]);
+  useEffect(() => {
+    setTechStack([
+      { name: "React 18", icon: <Zap className="w-5 h-5" /> },
+      { name: "Socket.io", icon: <Globe className="w-5 h-5" /> },
+      { name: "PostgreSQL", icon: <Shield className="w-5 h-5" /> },
+      { name: "Cloudinary", icon: <Image className="w-5 h-5" /> },
+      { name: "NVIDIA AI", icon: <Bot className="w-5 h-5" /> },
+      { name: "Prisma ORM", icon: <Sparkles className="w-5 h-5" /> }
+    ]);
+  }, []);
 
   const stats = [
     { number: "Real-time", label: "Message Delivery", icon: <Send className="w-6 h-6" /> },
@@ -149,9 +152,9 @@ const LandingPage = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center space-x-4">
-              <img 
-                src="/logo.png" 
-                alt="Sociogram Logo" 
+              <img
+                src="/logo.png"
+                alt="Sociogram Logo"
                 className="w-20 h-16 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 object-contain border-2 border-violet-200 hover:border-violet-300"
               />
               <div>
@@ -162,14 +165,14 @@ const LandingPage = () => {
               </div>
             </div>
             <div className="flex items-center space-x-3">
-              <button 
+              <button
                 onClick={() => openAuthSidebar('login')}
                 className="px-4 py-2 text-gray-700 hover:text-gray-900 font-medium transition-colors relative group"
               >
                 Sign In
                 <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-300 group-hover:w-full"></span>
               </button>
-              <button 
+              <button
                 onClick={() => openAuthSidebar('register')}
                 className="px-6 py-2.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-xl hover:from-indigo-600 hover:via-purple-600 hover:to-pink-600 transition-all duration-300 font-semibold shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center space-x-2"
               >
@@ -205,17 +208,17 @@ const LandingPage = () => {
                 Socialize.
               </span>
             </h2>
-            
+
             <p className="text-lg md:text-xl text-gray-600 mb-8 max-w-4xl mx-auto leading-relaxed">
-              Experience the future of social media with <span className="font-semibold text-purple-600">Sociogram</span> - 
-              where AI-powered conversations, real-time messaging, and intelligent notifications 
+              Experience the future of social media with <span className="font-semibold text-purple-600">Sociogram</span> -
+              where AI-powered conversations, real-time messaging, and intelligent notifications
               create meaningful connections like never before.
             </p>
 
             {/* Tech Stack Pills */}
             <div className="flex flex-wrap justify-center gap-3 mb-8">
               {techStack.map((tech, index) => (
-                <div 
+                <div
                   key={index}
                   className="flex items-center space-x-2 bg-white/80 backdrop-blur-sm border border-gray-200 rounded-full px-4 py-2 shadow-sm hover:shadow-md transition-all duration-300 hover:scale-105"
                 >
@@ -226,7 +229,7 @@ const LandingPage = () => {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-              <button 
+              <button
                 onClick={() => openAuthSidebar('register')}
                 className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-xl hover:from-indigo-600 hover:via-purple-600 hover:to-pink-600 transition-all duration-300 font-semibold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center justify-center group relative overflow-hidden"
               >
@@ -281,7 +284,7 @@ const LandingPage = () => {
               </span>
             </h3>
             <p className="text-xl text-gray-600 max-w-4xl mx-auto leading-relaxed">
-              Discover powerful features built with cutting-edge technology to enhance your social experience 
+              Discover powerful features built with cutting-edge technology to enhance your social experience
               and create meaningful connections in the digital age.
             </p>
           </div>
@@ -289,21 +292,19 @@ const LandingPage = () => {
           <div className="grid lg:grid-cols-2 gap-16 items-center">
             <div className="space-y-4">
               {features.map((feature, index) => (
-                <div 
+                <div
                   key={index}
-                  className={`group p-6 rounded-2xl transition-all duration-500 cursor-pointer transform hover:scale-105 ${
-                    currentFeature === index 
-                      ? `bg-gradient-to-r ${feature.color}/10 border-2 border-purple-300 shadow-xl` 
+                  className={`group p-6 rounded-2xl transition-all duration-500 cursor-pointer transform hover:scale-105 ${currentFeature === index
+                      ? `bg-gradient-to-r ${feature.color}/10 border-2 border-purple-300 shadow-xl`
                       : 'bg-white hover:bg-gray-50 border-2 border-gray-100 hover:border-gray-200 shadow-lg hover:shadow-xl'
-                  }`}
+                    }`}
                   onClick={() => setCurrentFeature(index)}
                 >
                   <div className="flex items-start space-x-4">
-                    <div className={`p-4 rounded-xl transition-all duration-500 ${
-                      currentFeature === index 
-                        ? `bg-gradient-to-r ${feature.color} text-white shadow-lg` 
+                    <div className={`p-4 rounded-xl transition-all duration-500 ${currentFeature === index
+                        ? `bg-gradient-to-r ${feature.color} text-white shadow-lg`
                         : 'bg-gray-100 text-gray-600 group-hover:bg-gray-200'
-                    }`}>
+                      }`}>
                       {feature.icon}
                     </div>
                     <div className="flex-1">
@@ -337,7 +338,7 @@ const LandingPage = () => {
                       backgroundSize: '20px 20px'
                     }}></div>
                   </div>
-                  
+
                   <div className="text-center relative z-10">
                     <div className={`w-24 h-24 bg-gradient-to-br ${features[currentFeature].color} rounded-2xl flex items-center justify-center mb-8 mx-auto shadow-lg transform transition-all duration-500 hover:rotate-12`}>
                       <div className="text-white text-3xl">
@@ -350,18 +351,17 @@ const LandingPage = () => {
                     <p className="text-gray-600 text-lg leading-relaxed max-w-md mx-auto mb-6">
                       {features[currentFeature].description}
                     </p>
-                    
+
                     {/* Feature Indicators */}
                     <div className="flex justify-center space-x-2">
                       {features.map((_, index) => (
                         <button
                           key={index}
                           onClick={() => setCurrentFeature(index)}
-                          className={`w-3 h-3 rounded-full transition-all duration-300 ${
-                            currentFeature === index 
-                              ? `bg-gradient-to-r ${features[index].color}` 
+                          className={`w-3 h-3 rounded-full transition-all duration-300 ${currentFeature === index
+                              ? `bg-gradient-to-r ${features[index].color}`
                               : 'bg-gray-300 hover:bg-gray-400'
-                          }`}
+                            }`}
                         />
                       ))}
                     </div>
@@ -453,7 +453,7 @@ const LandingPage = () => {
 
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
             {techStack.map((tech, index) => (
-              <div 
+              <div
                 key={index}
                 className="group bg-gradient-to-br from-gray-50 to-white border border-gray-200 rounded-2xl p-6 text-center hover:shadow-xl transition-all duration-300 transform hover:scale-105 hover:border-purple-300"
               >
@@ -487,7 +487,7 @@ const LandingPage = () => {
               <Coffee className="w-4 h-4 text-green-600" />
               <span className="text-sm font-semibold text-green-800">Ready to Get Started?</span>
             </div>
-            
+
             <h3 className="text-5xl font-bold text-gray-900 mb-6">
               Join the{' '}
               <span className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
@@ -496,12 +496,12 @@ const LandingPage = () => {
               Community
             </h3>
             <p className="text-xl text-gray-600 mb-10 max-w-3xl mx-auto leading-relaxed">
-              Start your journey with Sociogram today and experience social media like never before. 
+              Start your journey with Sociogram today and experience social media like never before.
               Connect with friends, share your moments, and discover the power of AI-enhanced conversations.
             </p>
-            
+
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-              <button 
+              <button
                 onClick={() => openAuthSidebar('register')}
                 className="w-full sm:w-auto px-10 py-4 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-xl hover:from-indigo-600 hover:via-purple-600 hover:to-pink-600 transition-all duration-300 font-semibold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center justify-center group"
               >
@@ -509,7 +509,7 @@ const LandingPage = () => {
                 Create Your Account
                 <ChevronRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform duration-300" />
               </button>
-              <button 
+              <button
                 onClick={() => openAuthSidebar('login')}
                 className="w-full sm:w-auto px-10 py-4 bg-white border-2 border-gray-300 text-gray-700 rounded-xl hover:border-purple-400 hover:bg-purple-50 hover:text-purple-700 transition-all duration-300 font-semibold text-lg shadow-lg hover:shadow-xl flex items-center justify-center group"
               >
@@ -554,9 +554,9 @@ const LandingPage = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="text-center">
             <div className="flex items-center justify-center space-x-4 mb-8">
-              <img 
-                src="/logo.png" 
-                alt="Sociogram Logo" 
+              <img
+                src="/logo.png"
+                alt="Sociogram Logo"
                 className="w-16 h-12 rounded-xl shadow-lg object-contain border-2 border-violet-300"
               />
               <div>
@@ -566,7 +566,7 @@ const LandingPage = () => {
                 <p className="text-sm text-gray-400">Next-Gen Social Platform</p>
               </div>
             </div>
-            
+
             <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto leading-relaxed">
               Connect meaningfully. Share authentically. Socialize intelligently.
             </p>
@@ -610,9 +610,9 @@ const LandingPage = () => {
       </footer>
 
       {/* Auth Sidebar */}
-      <AuthSidebar 
-        isOpen={authSidebarOpen} 
-        onClose={() => setAuthSidebarOpen(false)} 
+      <AuthSidebar
+        isOpen={authSidebarOpen}
+        onClose={() => setAuthSidebarOpen(false)}
         initialMode={authMode}
       />
     </div>

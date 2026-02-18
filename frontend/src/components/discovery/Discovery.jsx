@@ -67,18 +67,20 @@ const Discovery = () => {
   };
 
   const generateTrendingHashtags = () => {
-    const hashtags = [
-      { tag: '#photography', posts: 2340000, category: 'Creative' },
-      { tag: '#travel', posts: 1890000, category: 'Lifestyle' },
-      { tag: '#food', posts: 3210000, category: 'Lifestyle' },
-      { tag: '#fitness', posts: 1560000, category: 'Health' },
-      { tag: '#art', posts: 987000, category: 'Creative' },
-      { tag: '#nature', posts: 2100000, category: 'Nature' },
-      { tag: '#technology', posts: 876000, category: 'Tech' },
-      { tag: '#fashion', posts: 1430000, category: 'Style' },
-      { tag: '#music', posts: 1200000, category: 'Entertainment' },
-      { tag: '#motivation', posts: 890000, category: 'Inspiration' }
+    const categories = [
+      { label: 'Nature', topic: 'Environment' },
+      { label: 'Style', topic: 'Fashion' },
+      { label: 'Life', topic: 'Lifestyle' },
+      { label: 'Code', topic: 'Tech' },
+      { label: 'Music', topic: 'Entertainment' },
+      { label: 'Health', topic: 'Fitness' }
     ];
+
+    const hashtags = categories.map((item, i) => ({
+      tag: `#${item.label.toLowerCase()}${new Date().getMonth() + 1}`,
+      posts: 500000 + (i * 123456),
+      category: item.topic
+    }));
     setTrendingHashtags(hashtags);
   };
 

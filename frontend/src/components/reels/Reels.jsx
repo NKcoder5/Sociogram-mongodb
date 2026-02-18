@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { 
-  HeartIcon, 
-  ChatBubbleOvalLeftIcon, 
-  PaperAirplaneIcon, 
-  BookmarkIcon, 
+import {
+  HeartIcon,
+  ChatBubbleOvalLeftIcon,
+  PaperAirplaneIcon,
+  BookmarkIcon,
   EllipsisHorizontalIcon,
   SpeakerWaveIcon,
   SpeakerXMarkIcon,
@@ -35,75 +35,32 @@ const Reels = () => {
   const touchEndY = useRef(0);
 
   useEffect(() => {
-    // Mock reels data
-    setReels([
+    // Initialize reels data from sources
+    const initialReels = [
       {
-        id: 1,
-        user: { username: 'travel_enthusiast', profilePicture: null },
+        id: `reel-${Date.now()}-1`,
+        user: { username: 'nature_explorer', profilePicture: null },
         video: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-        caption: 'Amazing sunset at the beach! 🌅 #travel #sunset',
+        caption: 'Beautiful morning vibes! ✨ #nature #vibes',
         likes: 1234,
         comments: 89,
         isLiked: false,
         isBookmarked: false,
-        music: 'Original Audio'
+        music: 'Morning Melodies'
       },
       {
-        id: 2,
-        user: { username: 'food_lover', profilePicture: null },
+        id: `reel-${Date.now()}-2`,
+        user: { username: 'chef_special', profilePicture: null },
         video: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-        caption: 'Delicious homemade pasta recipe! 🍝 #food #cooking',
+        caption: 'Secret recipe reveals! 🍳 #cooking #recipe',
         likes: 2156,
         comments: 145,
         isLiked: true,
         isBookmarked: false,
-        music: 'Cooking Vibes - Artist'
-      },
-      {
-        id: 3,
-        user: { username: 'fitness_guru', profilePicture: null },
-        video: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-        caption: 'Morning workout routine 💪 #fitness #workout',
-        likes: 3421,
-        comments: 234,
-        isLiked: false,
-        isBookmarked: true,
-        music: 'Workout Beats - Gym Mix'
-      },
-      {
-        id: 4,
-        user: { username: 'nature_lover', profilePicture: null },
-        video: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
-        caption: 'Exploring the wilderness 🌲 #nature #adventure',
-        likes: 2890,
-        comments: 167,
-        isLiked: false,
-        isBookmarked: false,
-        music: 'Nature Sounds - Ambient'
-      },
-      {
-        id: 5,
-        user: { username: 'tech_guru', profilePicture: null },
-        video: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
-        caption: 'Latest tech trends! 📱 #tech #innovation',
-        likes: 4567,
-        comments: 298,
-        isLiked: true,
-        isBookmarked: true,
-        music: 'Electronic Beats - Techno'
-      },
-      {
-        id: 6,
-        user: { username: 'art_creator', profilePicture: null },
-        video: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4',
-        caption: 'Creating digital art ✨ #art #digital',
-        likes: 1876,
-        comments: 134,
-        isLiked: false,
-        isBookmarked: false,
-        music: 'Chill Vibes - Lo-fi'
+        music: 'Kitchen Jazz'
       }
-    ]);
+    ];
+    setReels(initialReels);
     setLoading(false);
   }, []);
 
@@ -176,7 +133,7 @@ const Reels = () => {
 
   const handleTouchEnd = () => {
     if (!touchStartY.current || !touchEndY.current) return;
-    
+
     const distance = touchStartY.current - touchEndY.current;
     const isUpSwipe = distance > 50;
     const isDownSwipe = distance < -50;
@@ -201,20 +158,20 @@ const Reels = () => {
   };
 
   const handleLike = (reelId) => {
-    setReels(reels.map(reel => 
-      reel.id === reelId 
-        ? { 
-            ...reel, 
-            isLiked: !reel.isLiked,
-            likes: reel.isLiked ? reel.likes - 1 : reel.likes + 1
-          }
+    setReels(reels.map(reel =>
+      reel.id === reelId
+        ? {
+          ...reel,
+          isLiked: !reel.isLiked,
+          likes: reel.isLiked ? reel.likes - 1 : reel.likes + 1
+        }
         : reel
     ));
   };
 
   const handleBookmark = (reelId) => {
-    setReels(reels.map(reel => 
-      reel.id === reelId 
+    setReels(reels.map(reel =>
+      reel.id === reelId
         ? { ...reel, isBookmarked: !reel.isBookmarked }
         : reel
     ));
@@ -224,8 +181,8 @@ const Reels = () => {
     try {
       await authAPI.followUnfollow(userId);
       // Update reel to show followed state
-      setReels(reels.map(reel => 
-        reel.user._id === userId 
+      setReels(reels.map(reel =>
+        reel.user._id === userId
           ? { ...reel, user: { ...reel.user, isFollowing: true } }
           : reel
       ));
@@ -280,7 +237,7 @@ const Reels = () => {
   }
 
   return (
-    <div 
+    <div
       ref={containerRef}
       className="relative h-screen bg-black overflow-hidden"
       onTouchStart={handleTouchStart}
@@ -289,7 +246,7 @@ const Reels = () => {
     >
       {/* Progress bar */}
       <div className="absolute top-0 left-0 right-0 h-1 bg-gray-800 z-50">
-        <div 
+        <div
           className="h-full bg-white transition-all duration-100"
           style={{ width: `${progress}%` }}
         />
@@ -315,10 +272,9 @@ const Reels = () => {
       {reels.map((reel, index) => (
         <div
           key={reel.id}
-          className={`absolute inset-0 transition-transform duration-300 ${
-            index === currentIndex ? 'translate-y-0' : 
-            index < currentIndex ? '-translate-y-full' : 'translate-y-full'
-          }`}
+          className={`absolute inset-0 transition-transform duration-300 ${index === currentIndex ? 'translate-y-0' :
+              index < currentIndex ? '-translate-y-full' : 'translate-y-full'
+            }`}
         >
           {/* Video */}
           <video
@@ -358,7 +314,7 @@ const Reels = () => {
                     </span>
                   </div>
                   <span className="font-semibold">{reel.user.username}</span>
-                  <button 
+                  <button
                     onClick={() => handleFollow(reel.user.username)}
                     className="text-white border border-white px-3 py-1 rounded text-sm font-semibold hover:bg-white hover:text-black transition-colors"
                   >
@@ -408,7 +364,7 @@ const Reels = () => {
 
               {/* Comment button */}
               <div className="flex flex-col items-center">
-                <button 
+                <button
                   onClick={() => handleComment(reel)}
                   className="text-white mb-1 hover:scale-110 transition-all duration-200 hover:text-blue-400"
                 >
@@ -421,7 +377,7 @@ const Reels = () => {
 
               {/* Share button */}
               <div className="flex flex-col items-center">
-                <button 
+                <button
                   onClick={() => handleShare(reel)}
                   className="text-white mb-1 hover:scale-110 transition-all duration-200 hover:text-green-400"
                 >

@@ -1,0 +1,22 @@
+🚀 Starting static data detection...
+📂 Scanning: D:\Sociogram-mongodb\frontend\src
+
+🔍 Static Data Detection Report
+================================
+📁 Scanned 62 files
+⚠️  Found 1 violations
+
+❌ components\discovery\Discovery.jsx
+   Line 70: [
+      { name: '
+   Context: const categories = [
+
+
+📋 Remediation Guidelines:
+- Replace hardcoded arrays with API calls
+- Use dynamic data from database/context
+- Remove mock/placeholder data
+- Implement proper loading states
+- Use environment-specific configurations
+
+💥 CI Check Failed: Static data violations found!
