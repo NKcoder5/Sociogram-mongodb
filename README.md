@@ -1,186 +1,93 @@
-# Sociogram
+# 🌐 Sociogram - The Next-Gen Social OS
+### A High-Performance Social Network with Integrated Generative AI
 
-A modern social media platform with real-time messaging, AI integration, and comprehensive social features, featuring an always-available AI assistant chat bubble.
+[![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://reactjs.org/)
+[![NodeJS](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-47A248?style=for-the-badge&logo=mongodb&logoColor=white)](https://www.mongodb.com/)
+[![Socket.io](https://img.shields.io/badge/Socket.io-010101?style=for-the-badge&logo=socketdotio&logoColor=white)](https://socket.io/)
+[![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev/)
 
-## Description
+**Sociogram** is a premier social media platform that redefines digital interaction by blending traditional networking with cutting-edge AI integration. Designed for high engagement and real-time connectivity, Sociogram provides a seamless ecosystem for creators and communities, featuring a persistent AI assistant that enhances every aspect of the user journey.
 
-Sociogram is a full-stack social media application that combines traditional social networking features with advanced messaging capabilities and an AI-powered assistant. The platform offers a seamless user experience with an always-accessible AI chat bubble that provides instant help and enhances user engagement.
+---
 
-## Tech Stack
+## 🚀 Key Modules & Capabilities
 
-### Backend
-- **Node.js** + **Express.js** - Server framework
-- **PostgreSQL** + **Prisma ORM** - Database and ORM
-- **Socket.io** - Real-time communication
-- **JWT** - Authentication
-- **Multer** + **Sharp** - File upload and processing
-- **bcryptjs** - Password hashing
+### 🤖 Generative AI Ecosystem (NVIDIA Powered)
+*   **Floating AI Assistant**: A context-aware, persistent chat bubble that provides real-time help, navigation tips, and platform insights.
+*   **In-Message Smart Helper**: AI-driven tools to rewrite, improve, or translate message drafts, along with intelligent reply suggestions.
+*   **Contextual Intelligence**: The AI understands your current screen—be it Reels, Feed, or Profile—and offers relevant assistance.
 
-### Frontend
-- **React 19** - UI framework
-- **Tailwind CSS** - Styling
-- **React Router** - Navigation
-- **Axios** - HTTP client
-- **Socket.io Client** - Real-time features
-- **Vite** - Build tool
+### 💬 Real-Time Messaging Hub
+*   **High-Fidelity Chat**: Instant 1-to-1 and Group messaging powered by **Socket.io** with read receipts and typing indicators.
+*   **Rich Media Sharing**: Seamlessly share high-resolution images, videos, and documents within conversations.
+*   **Advanced Chat Features**: Message reactions (emojis), replies, starring messages, and robust moderation tools.
 
-### AI Integration
-- **NVIDIA API** - AI chat assistant and smart features
-- **Always-Available Chat Bubble** - Persistent AI assistant accessible from any screen
-- **Context-Aware Assistance** - AI understands the current page and user context
-- **Interactive Help** - Get guidance on using platform features in real-time
+### 🎥 Short-Form Media (Reels & Stories)
+*   **Vertical Video Engine**: An immersive, full-screen Reels experience with swipe gestures and keyboard navigation.
+*   **Ephemeral Stories**: 24-hour disappearing content with interactive viewers, progress bars, and viewed-state tracking.
+*   **Real-time Engagement**: Instant like/comment interactions with live notification fan-out.
 
-## Core Features
+### 📈 Pro Activity & Discovery Dashboard
+*   **Advanced Analytics**: Track your social reach with detailed metrics on followers, post performance, and engagement rates.
+*   **Smart Discovery Engine**: AI-curated "Suggested Users" and trending hashtag categories based on global platform activity.
+*   **Engagement Tracking**: Real-time notification system for likes, follows, and comments.
 
-### Authentication & Access
-- Email/password registration and login with JWT-based sessions.
-- Protected routes on the frontend using `ProtectedRoute` / `PublicRoute`.
-- Persistent auth using local storage and automatic profile refresh.
+---
 
-### Layout & Navigation
-- Left sidebar navigation for Feed, Messages, Create, Reels, Activity, Profile, Settings.
-- Responsive layout with sticky feed header and right-hand sidebar widgets.
-- Global floating AI assistant chat bubble pinned to the **bottom-right** on most pages.
+## 🎨 Premium Design Aesthetics
+*   **Glassmorphic Design**: A modern, translucent UI aesthetic with vibrant gradient accents and balanced whitespace.
+*   **Micro-Animation Layer**: Subtle hover effects, smooth transitions, and custom spin animations that make the platform feel alive.
+*   **Custom UX Details**: Premium elements like a unified "Instagram-inspired" button system and specialized slim scrollbars.
+*   **Responsive Precision**: Optimized for every device, from mobile-first layouts to high-resolution desktop environments.
 
-### Feed & Posts
-- Personalized home feed (`For You`, `Following`, `Trending` tabs).
-- Rich posts with captions and images.
-- Inline actions: like, comment, share, bookmark.
-- Real-time like/comment counts with notification fan-out to post owners.
-- Inline comment composer with "view all comments" expansion.
-- Post reactions (emoji bar) powered by `PostReactions`.
+---
 
-### Stories
-- Instagram-style stories row at the top of the feed.
-- Create story modal with text or media stories.
-- Story viewer with auto-advance, progress bars, and tap navigation.
-- Viewed/unviewed state and server-side "mark as viewed" tracking.
+## 🛠️ Technology Stack
+*   **Frontend**: React 19 (Vite, Hooks, Tailwind CSS)
+*   **Backend**: Node.js & Express.js
+*   **Database**: MongoDB with Mongoose (Offline-Ready Schema)
+*   **Real-time**: Socket.io (WebSocket Engine)
+*   **AI Engine**: NVIDIA API Integration
+*   **Storage/Media**: Cloudinary & Multer with Sharp for Image Processing
+*   **State**: Context API & Persistence Layer
 
-### Reels
-- Full-screen vertical short-video experience.
-- Keyboard and touch navigation (Arrow keys / swipe up & down).
-- Play/pause, mute/unmute, progress bar, and overlay controls.
-- Inline like, comment, share, and follow actions.
+---
 
-### Profiles & Settings
-- Public profile pages with post grid, bio, follower/following counts.
-- Own profile has quick actions to edit profile picture and open **Settings**.
-- Settings page with tabs for Profile, Notifications, Privacy, Security, Account.
-- Basic toggles for push/email/message notifications and privacy options.
-- Account tab with sign-out and "danger zone" delete-account UI.
+## ⚡ Performance Optimization
+*   **Socket-Based Updates**: Real-time data synchronization for likes and messages without page reloads.
+*   **Optimized Image Delivery**: Automatic resizing and compression using Sharp to ensure ultra-fast content loading.
+*   **Virtualized Content**: Efficient rendering of large feeds and story rows to maintain 60fps scrolling.
 
-### Follow System & Discovery
-- Suggested users panel on the feed sidebar and dedicated **Discover** page.
-- Follow/unfollow with mutual-connection detection (followers vs following).
-- Discovery page with:
-  - Global search across users and posts.
-  - Suggested users grid with follow + "start chat" actions.
-  - Explore posts grid and "Trending Posts" section.
-  - Trending hashtags with category and usage counts.
+---
 
-### Notifications
-- In-feed notification bell with unread indicator.
-- Dedicated notifications view with tabs for:
-  - All, Unread, Likes, Comments, Follows.
-- Notifications generated from real post likes/comments and follow events.
-- Per-notification read state and "Mark all read" control.
+## 📦 Installation & Development
 
-### Activity Dashboard & Analytics
-- Activity dashboard with three tabs: **Analytics**, **Discover**, **Trending**.
-- Real stats driven by your actual posts and followers:
-  - Total posts, followers, following, likes, views, engagement rate.
-- Recent activity feed built from real notifications and interactions.
-- Top-performing posts section with thumbnail, likes, comments, reach, engagement.
-- Discovery panel inside Activity with suggested users and trending topics.
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/NKcoder5/Sociogram-mongodb.git
+   cd Sociogram-mongodb
+   ```
 
-### Messaging
-- Central messages page for all conversations.
-- Real-time 1-to-1 and group chat using Socket.io.
-- Conversation list with unread counts and last message previews.
-- Group chats with people you follow.
-- Send text messages and share media (images, videos, files).
-- Emoji reactions, replies, edit/delete (your own messages), star/save, forward, and report.
-- Read receipts (sent, delivered, read) and basic online/offline indicators.
-- Message search with support for filters and search history.
+2. **Backend Setup**:
+   ```bash
+   cd backend
+   npm install
+   # Create .env with DATABASE_URL (MongoDB), JWT_SECRET, and NVIDIA_API_KEY
+   npm start
+   ```
 
-### AI Experiences
-- Floating AI assistant chat bubble (bottom-right):
-  - Always available on most pages.
-  - Context-aware help about main screens (Feed, Messages, Stories, Reels, Profile, Activity, Explore, Create).
-  - Quick question chips and typing indicator.
-  - Copy-to-clipboard and text-to-speech for responses.
-  - Minimize and **Close** buttons so you can hide it when you don’t need it.
-  - Automatically hidden on dedicated messaging pages to avoid overlap.
-- In-messages AI helper:
-  - Chat with AI from inside the messaging hub.
-  - Improve or rewrite message drafts.
-  - Translate drafts to other languages.
-  - Get smart reply suggestions and conversation starters.
+3. **Frontend Setup**:
+   ```bash
+   cd ../frontend
+   npm install
+   npm run dev
+   ```
 
-### Stories, Reels & Trending Content
-- 24-hour stories with viewed/unviewed styling and progress bars.
-- Short-video reels with keyboard/touch navigation and control hints overlay.
-- Static but realistic "Trending today" widget with example hashtags.
+---
 
-## User Flow
+## 📄 License
+Developed for **Sociogram Network**. All rights reserved.
 
-1. **Sign Up / Login** – Create an account or sign back in.
-2. **Complete Profile** – Update profile picture and bio from the Profile or Settings page.
-3. **Discover People** – Use Discover/Explore and suggestions to find users.
-4. **Follow Users** – Build your network so their posts appear in your feed.
-5. **Create Stories & Posts** – Share photos, reels, and text updates.
-6. **Engage with Content** – Like, comment, react, and share posts and reels.
-7. **Chat** – Use Messages for 1-to-1 or group chat and media sharing.
-8. **Use AI Helpers** – Ask the floating assistant or open the in-messages AI helper for writing/translation help.
-9. **Track Activity** – View analytics, notifications, and trending content from the Activity and Notifications views.
-10. **Tune Settings** – Adjust notification, privacy, and account settings as needed.
-
-## Installation
-
-### Prerequisites
-- Node.js (v16+)
-- PostgreSQL
-- npm/yarn
-
-### Setup
-```bash
-# Clone repository
-git clone <repo-url>
-cd sociogram
-
-# Install dependencies
-npm install
-cd backend && npm install
-cd ../frontend && npm install
-
-# Configure environment
-# Backend: Create .env with DATABASE_URL, JWT_SECRET, etc.
-# Frontend: Create .env with VITE_API_URL, VITE_SOCKET_URL
-
-# Setup database
-cd backend
-npx prisma generate
-npx prisma db push
-
-# Start development servers
-npm run dev  # Backend (port 8000)
-cd ../frontend
-npm run dev  # Frontend (port 5001)
-```
-
-## Environment Variables
-
-### Backend (.env)
-```env
-DATABASE_URL="postgresql://user:pass@localhost:5432/sociogram"
-JWT_SECRET="your-jwt-secret"
-NVIDIA_API_KEY="your-nvidia-api-key"
-PORT=8000
-```
-
-### Frontend (.env)
-```env
-VITE_API_URL=https://social-media-pdbl.onrender.com/api/v1
-VITE_SOCKET_URL=https://social-media-pdbl.onrender.com
-```
-
+---
+*Created with ❤️ for the Next Generation of Social Connection.*
